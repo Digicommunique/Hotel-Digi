@@ -1,0 +1,104 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HotelSphere - Hostel Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      body { 
+        font-family: 'Inter', sans-serif; 
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #003d80;
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #002d5a;
+      }
+
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      @media print {
+        @page {
+          margin: 1cm;
+          size: auto;
+        }
+        .no-print { display: none !important; }
+        .no-print-backdrop { background-color: white !important; padding: 0 !important; overflow: visible !important; }
+        body { background: white !important; margin: 0; padding: 0; color: black !important; }
+        .invoice-sheet { 
+          box-shadow: none !important; 
+          border: none !important; 
+          margin: 0 !important; 
+          width: 100% !important; 
+          max-width: none !important; 
+          position: relative !important;
+          padding: 0 !important;
+          overflow: visible !important;
+        }
+        main { overflow: visible !important; height: auto !important; position: static !important; }
+        nav, footer, .bulk-actions-bar, .action-bar-print-hide { display: none !important; }
+        .print-break-inside-avoid { page-break-inside: avoid; }
+      }
+
+      .status-pulse {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: .7; }
+      }
+      
+      .db-sync-pulse {
+        animation: db-pulse 1.5s infinite;
+      }
+      @keyframes db-pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+
+      .cloud-sync-anim {
+        animation: cloud-pulse 2s infinite;
+      }
+      @keyframes cloud-pulse {
+        0% { opacity: 1; transform: translateY(0); }
+        50% { opacity: 0.5; transform: translateY(-2px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "dexie": "https://esm.sh/dexie@^4.0.1",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.48.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-50 text-black selection:bg-blue-100 selection:text-blue-900">
+    <div id="root"></div>
+  </body>
+</html>
