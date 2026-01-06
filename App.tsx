@@ -1,17 +1,17 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Room, RoomStatus, Guest, Booking, HostelSettings, Transaction, RoomShiftLog, CleaningLog, Quotation, GroupProfile } from './types';
-import { INITIAL_ROOMS, STATUS_COLORS } from './constants';
-import { db } from './services/db';
-import { pushToCloud } from './services/supabase';
-import GuestCheckin from './components/GuestCheckin';
-import StayManagement from './components/StayManagement';
-import Reports from './components/Reports';
-import Accounting from './components/Accounting';
-import Settings from './components/Settings';
-import ReservationEntry from './components/ReservationEntry';
-import GroupModule from './components/GroupModule';
-import RoomActionModal from './components/RoomActionModal';
+import { Room, RoomStatus, Guest, Booking, HostelSettings, Transaction, RoomShiftLog, CleaningLog, Quotation, GroupProfile } from './types.ts';
+import { INITIAL_ROOMS, STATUS_COLORS } from './constants.tsx';
+import { db } from './services/db.ts';
+import { pushToCloud } from './services/supabase.ts';
+import GuestCheckin from './components/GuestCheckin.tsx';
+import StayManagement from './components/StayManagement.tsx';
+import Reports from './components/Reports.tsx';
+import Accounting from './components/Accounting.tsx';
+import Settings from './components/Settings.tsx';
+import ReservationEntry from './components/ReservationEntry.tsx';
+import GroupModule from './components/GroupModule.tsx';
+import RoomActionModal from './components/RoomActionModal.tsx';
 
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -382,7 +382,8 @@ const App: React.FC = () => {
             )}
 
             <div className="space-y-10">
-              {Object.entries(roomsByFloor).sort().map(([floor, floorRooms]) => (
+              {/* Fix: Cast Object.entries to correct type to avoid mapping errors on 'unknown' types */}
+              {(Object.entries(roomsByFloor) as [string, Room[]][]).sort().map(([floor, floorRooms]) => (
                 <div key={floor} className="bg-white rounded-[2rem] shadow-sm border overflow-hidden">
                   <div className="bg-blue-50 px-8 py-3 font-black text-black uppercase text-[10px] tracking-widest border-b">Floor Level {floor}</div>
                   <div className="p-8 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-4">

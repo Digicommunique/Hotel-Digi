@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { HostelSettings, Room, AgentConfig, RoomStatus } from '../types';
-import { exportDatabase, importDatabase } from '../services/db';
+import { HostelSettings, Room, AgentConfig, RoomStatus } from '../types.ts';
+import { exportDatabase, importDatabase } from '../services/db.ts';
 
 interface SettingsProps {
   settings: HostelSettings;
@@ -102,14 +102,14 @@ const Settings: React.FC<SettingsProps> = ({ settings, setSettings, rooms, setRo
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-black uppercase ml-2">Property Logo</label>
                   <div className="h-32 border-2 border-dashed rounded-2xl flex items-center justify-center bg-gray-50 overflow-hidden relative group">
-                    {tempSettings.logo ? <img src={tempSettings.logo} className="w-full h-full object-contain" /> : <span className="text-[9px] font-black text-black">Upload Logo</span>}
+                    {tempSettings.logo ? <img src={tempSettings.logo} className="w-full h-full object-contain" /> : <span className="text-[9px] font-black text-black text-center">Upload Branding Logo</span>}
                     <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, 'logo')} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-black uppercase ml-2">Auth. Signature</label>
                   <div className="h-32 border-2 border-dashed rounded-2xl flex items-center justify-center bg-gray-50 overflow-hidden relative group">
-                    {tempSettings.signature ? <img src={tempSettings.signature} className="w-full h-full object-contain" /> : <span className="text-[9px] font-black text-black">Upload Sign</span>}
+                    {tempSettings.signature ? <img src={tempSettings.signature} className="w-full h-full object-contain" /> : <span className="text-[9px] font-black text-black text-center">Upload Sign Asset</span>}
                     <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, 'signature')} />
                   </div>
                 </div>
@@ -239,7 +239,9 @@ const Settings: React.FC<SettingsProps> = ({ settings, setSettings, rooms, setRo
                 <p className="text-xs text-black font-black uppercase tracking-tight">Run this SQL in Supabase Editor to align your cloud schema:</p>
                 <pre className="bg-white p-6 rounded-2xl border font-mono text-[10px] text-black overflow-x-auto shadow-inner select-all leading-relaxed">
 {`-- SUPABASE SCHEMA ALIGNMENT --
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS "gstNumber" TEXT, ADD COLUMN IF NOT EXISTS "taxRate" NUMERIC, ADD COLUMN IF NOT EXISTS "hsnCode" TEXT;`}
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS "gstNumber" TEXT, ADD COLUMN IF NOT EXISTS "taxRate" NUMERIC, ADD COLUMN IF NOT EXISTS "hsnCode" TEXT;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS "entityName" TEXT, ADD COLUMN IF NOT EXISTS "referenceId" TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "groupId" TEXT;`}
                 </pre>
              </div>
           </div>

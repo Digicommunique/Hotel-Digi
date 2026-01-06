@@ -1,6 +1,5 @@
 
-import Dexie from 'dexie';
-import { type Table } from 'dexie';
+import { Dexie, type Table } from 'dexie';
 import { Room, Guest, Booking, Transaction, RoomShiftLog, CleaningLog, Quotation, HostelSettings, GroupProfile } from '../types';
 
 export class HotelSphereDB extends Dexie {
@@ -16,6 +15,7 @@ export class HotelSphereDB extends Dexie {
 
   constructor() {
     super('HotelSphereDB');
+    // Ensure Dexie versioning is configured on the instance
     this.version(2).stores({
       rooms: 'id, number, status, type',
       guests: 'id, name, phone, email',
@@ -58,6 +58,7 @@ export async function importDatabase(jsonFile: File) {
     reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
+        // Correct usage of instance-level transaction management
         await db.transaction('rw', [db.rooms, db.guests, db.bookings, db.transactions, db.shiftLogs, db.cleaningLogs, db.quotations, db.settings, db.groups], async () => {
           if (data.rooms) { await db.rooms.clear(); await db.rooms.bulkAdd(data.rooms); }
           if (data.guests) { await db.guests.clear(); await db.guests.bulkAdd(data.guests); }
