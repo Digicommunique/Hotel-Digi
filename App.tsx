@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { Room, RoomStatus, Guest, Booking, HostelSettings, Transaction, RoomShiftLog, CleaningLog, Quotation, GroupProfile } from './types.ts';
+import { Room, RoomStatus, Guest, Booking, HostelSettings, Transaction, RoomShiftLog, CleaningLog, Quotation, GroupProfile, UserRole } from './types.ts';
 import { INITIAL_ROOMS, STATUS_COLORS } from './constants.tsx';
 import { db } from './services/db.ts';
-import { pushToCloud } from './services/supabase.ts';
+import { pushToCloud, supabase } from './services/supabase.ts';
 import GuestCheckin from './components/GuestCheckin.tsx';
 import StayManagement from './components/StayManagement.tsx';
 import Reports from './components/Reports.tsx';
@@ -12,6 +11,7 @@ import Settings from './components/Settings.tsx';
 import ReservationEntry from './components/ReservationEntry.tsx';
 import GroupModule from './components/GroupModule.tsx';
 import RoomActionModal from './components/RoomActionModal.tsx';
+import Login from './components/Login.tsx';
 
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -25,6 +25,11 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<HostelSettings>({
     name: 'HotelSphere Pro',
     address: 'Suite 101, Enterprise Tower, Metro City',
+    adminPassword: 'admin',
+    receptionistPassword: 'admin',
+    accountantPassword: 'admin',
+    supervisorPassword: 'admin',
+    upiId: 'hotel@upi',
     agents: [
       { name: 'Direct', commission: 0 },
       { name: 'Booking.com', commission: 15 },
@@ -34,6 +39,9 @@ const App: React.FC = () => {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>('RECEPTIONIST');
+  
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [showCheckinForm, setShowCheckinForm] = useState(false);
@@ -47,7 +55,8 @@ const App: React.FC = () => {
   useEffect(() => {
     const initData = async () => {
       try {
-        const [r, g, b, t, gr, s, c, q, set] = await Promise.all([
+        // First try to load from local Dexie
+        let [r, g, b, t, gr, s, c, q, set] = await Promise.all([
           db.rooms.toArray(),
           db.guests.toArray(),
           db.bookings.toArray(),
@@ -59,24 +68,53 @@ const App: React.FC = () => {
           db.settings.get('primary')
         ]);
 
-        if (r.length > 0) setRooms(r); else {
+        // If local DB is empty, try pulling from Supabase Cloud
+        if (!r || r.length === 0) {
+          console.log("Local DB empty, pulling from cloud...");
+          const { data: cloudRooms } = await supabase.from('rooms').select('*');
+          const { data: cloudGuests } = await supabase.from('guests').select('*');
+          const { data: cloudBookings } = await supabase.from('bookings').select('*');
+          const { data: cloudTransactions } = await supabase.from('transactions').select('*');
+          const { data: cloudSettings } = await supabase.from('settings').select('*').eq('id', 'primary').single();
+          const { data: cloudGroups } = await supabase.from('groups').select('*');
+
+          if (cloudRooms && cloudRooms.length > 0) {
+            r = cloudRooms; await db.rooms.bulkAdd(r);
+            if (cloudGuests) { g = cloudGuests; await db.guests.bulkAdd(g); }
+            if (cloudBookings) { b = cloudBookings; await db.bookings.bulkAdd(b); }
+            if (cloudTransactions) { t = cloudTransactions; await db.transactions.bulkAdd(t); }
+            if (cloudGroups) { gr = cloudGroups; await db.groups.bulkAdd(gr); }
+            if (cloudSettings) { set = cloudSettings; await db.settings.put(set); }
+          }
+        }
+
+        if (r && r.length > 0) {
+          setRooms(r);
+        } else {
           await db.rooms.bulkAdd(INITIAL_ROOMS);
           setRooms(INITIAL_ROOMS);
+          await pushToCloud('rooms', INITIAL_ROOMS);
         }
         
-        setGuests(g);
-        setBookings(b);
-        setTransactions(t);
-        setGroups(gr);
-        setShiftLogs(s);
-        setCleaningLogs(c);
-        setQuotations(q);
-        if (set) setSettings(set);
-        else await db.settings.add({ ...settings, id: 'primary' });
+        setGuests(g || []);
+        setBookings(b || []);
+        setTransactions(t || []);
+        setGroups(gr || []);
+        setShiftLogs(s || []);
+        setCleaningLogs(c || []);
+        setQuotations(q || []);
+        
+        if (set) {
+          setSettings(set);
+        } else {
+          await db.settings.add({ ...settings, id: 'primary' });
+          await pushToCloud('settings', { ...settings, id: 'primary' });
+        }
         
         setIsLoading(false);
       } catch (error) {
-        console.error("Failed to load data:", error);
+        console.error("Critical error during data initialization:", error);
+        setRooms(INITIAL_ROOMS);
         setIsLoading(false);
       }
     };
@@ -104,13 +142,14 @@ const App: React.FC = () => {
     }
   };
 
-  const updateRooms = (newRooms: Room[]) => { setRooms(newRooms); syncToDB(db.rooms, newRooms, 'rooms'); };
-  const updateGuests = (newGuests: Guest[]) => { setGuests(newGuests); syncToDB(db.guests, newGuests, 'guests'); };
-  const updateBookings = (newBookings: Booking[]) => { setBookings(newBookings); syncToDB(db.bookings, newBookings, 'bookings'); };
-  const updateTransactions = (newTx: Transaction[]) => { setTransactions(newTx); syncToDB(db.transactions, newTx, 'transactions'); };
-  const updateGroups = (newGroups: GroupProfile[]) => { setGroups(newGroups); syncToDB(db.groups, newGroups, 'groups'); };
-  const updateSettings = (newSet: HostelSettings) => { setSettings(newSet); syncToDB(db.settings, newSet, 'settings'); };
-  const updateQuotations = (newQuotations: Quotation[]) => { setQuotations(newQuotations); syncToDB(db.quotations, newQuotations, 'quotations'); };
+  const updateRooms = (newRooms: Room[]) => { setRooms([...newRooms]); syncToDB(db.rooms, newRooms, 'rooms'); };
+  const updateGuests = (newGuests: Guest[]) => { setGuests([...newGuests]); syncToDB(db.guests, newGuests, 'guests'); };
+  const updateBookings = (newBookings: Booking[]) => { setBookings([...newBookings]); syncToDB(db.bookings, newBookings, 'bookings'); };
+  const updateTransactions = (newTx: Transaction[]) => { setTransactions([...newTx]); syncToDB(db.transactions, newTx, 'transactions'); };
+  const updateGroups = (newGroups: GroupProfile[]) => { setGroups([...newGroups]); syncToDB(db.groups, newGroups, 'groups'); };
+  // FIX: Added missing updateQuotations function to fix the reference error in the Accounting component.
+  const updateQuotations = (newQuotations: Quotation[]) => { setQuotations([...newQuotations]); syncToDB(db.quotations, newQuotations, 'quotations'); };
+  const updateSettings = (newSet: HostelSettings) => { setSettings({...newSet}); syncToDB(db.settings, newSet, 'settings'); };
 
   const handleAddPayment = (bookingId: string, payment: any) => {
     const booking = bookings.find(b => b.id === bookingId);
@@ -148,9 +187,7 @@ const App: React.FC = () => {
   const getBookingColorClasses = (booking?: Booking) => {
     if (!booking) return '';
     if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') return '';
-    
     const hashKey = booking.groupId || booking.bookingNo || booking.id;
-    
     const palettes = [
       'bg-blue-50 border-blue-600 text-blue-900',
       'bg-indigo-50 border-indigo-600 text-indigo-900',
@@ -163,44 +200,36 @@ const App: React.FC = () => {
       'bg-violet-50 border-violet-600 text-violet-900',
       'bg-emerald-50 border-emerald-600 text-emerald-900',
     ];
-
     let hash = 0;
-    for (let i = 0; i < hashKey.length; i++) {
-      hash = hashKey.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % palettes.length;
-    return palettes[index];
+    for (let i = 0; i < hashKey.length; i++) hash = hashKey.charCodeAt(i) + ((hash << 5) - hash);
+    return palettes[Math.abs(hash) % palettes.length];
   };
 
-  const stats = useMemo(() => {
-    return {
-      total: rooms.length,
-      vacant: rooms.filter(r => r.status === RoomStatus.VACANT).length,
-      occupied: rooms.filter(r => r.status === RoomStatus.OCCUPIED).length,
-      reserved: rooms.filter(r => r.status === RoomStatus.RESERVED).length,
-      dirty: rooms.filter(r => r.status === RoomStatus.DIRTY).length,
-      repair: rooms.filter(r => r.status === RoomStatus.REPAIR).length,
-    };
-  }, [rooms]);
+  const stats = useMemo(() => ({
+    total: rooms.length,
+    vacant: rooms.filter(r => r.status === RoomStatus.VACANT).length,
+    occupied: rooms.filter(r => r.status === RoomStatus.OCCUPIED).length,
+    reserved: rooms.filter(r => r.status === RoomStatus.RESERVED).length,
+    dirty: rooms.filter(r => r.status === RoomStatus.DIRTY).length,
+    repair: rooms.filter(r => r.status === RoomStatus.REPAIR).length,
+  }), [rooms]);
 
-  const roomsByFloor = useMemo(() => {
-    return rooms.reduce((acc, room) => {
-      acc[room.floor] = acc[room.floor] || [];
-      acc[room.floor].push(room);
-      return acc;
-    }, {} as Record<number, Room[]>);
-  }, [rooms]);
+  const roomsByFloor = useMemo(() => rooms.reduce((acc, room) => {
+    acc[room.floor] = acc[room.floor] || [];
+    acc[room.floor].push(room);
+    return acc;
+  }, {} as Record<number, Room[]>), [rooms]);
 
   const handleRoomClick = (room: Room) => {
+    if (currentUserRole === 'SUPERVISOR' && room.status !== RoomStatus.DIRTY && room.status !== RoomStatus.REPAIR) return;
+    
     if (isMultiSelectMode) {
-      setSelectedRoomIdsForBulk(prev => 
-        prev.includes(room.id) ? prev.filter(id => id !== room.id) : [...prev, room.id]
-      );
+      setSelectedRoomIdsForBulk(prev => prev.includes(room.id) ? prev.filter(id => id !== room.id) : [...prev, room.id]);
       return;
     }
     setSelectedRoom(room);
     const activeB = bookings.find(b => (b.roomId === room.id || b.id === room.currentBookingId) && (b.status === 'ACTIVE' || b.status === 'RESERVED'));
-    if (activeB) {
+    if (activeB && currentUserRole !== 'SUPERVISOR') {
       setActiveBookingId(activeB.id);
     } else {
       setShowRoomActions(true);
@@ -210,16 +239,11 @@ const App: React.FC = () => {
   const handleCheckinSave = async (data: { guest: Partial<Guest>, bookings: any[] }) => {
     const guestId = data.guest.id || Math.random().toString(36).substr(2, 9);
     const guestToSave = { ...data.guest, id: guestId } as Guest;
-    
     const existingIdx = guests.findIndex(g => g.id === guestId);
     let newGuests = [...guests];
-    if (existingIdx > -1) {
-      newGuests[existingIdx] = { ...newGuests[existingIdx], ...data.guest } as Guest;
-    } else {
-      newGuests.push(guestToSave);
-    }
-    setGuests(newGuests);
-    await syncToDB(db.guests, newGuests, 'guests');
+    if (existingIdx > -1) newGuests[existingIdx] = { ...newGuests[existingIdx], ...data.guest } as Guest;
+    else newGuests.push(guestToSave);
+    updateGuests(newGuests);
 
     const newBookingsList: Booking[] = data.bookings.map(b => ({
       ...b,
@@ -227,22 +251,15 @@ const App: React.FC = () => {
       guestId: guestId,
     }));
     const updatedBookings = [...bookings, ...newBookingsList];
-    setBookings(updatedBookings);
-    await syncToDB(db.bookings, updatedBookings, 'bookings');
+    updateBookings(updatedBookings);
 
     const updatedRooms = rooms.map(r => {
       const bForRoom = newBookingsList.find(nb => nb.roomId === r.id);
       if (bForRoom) return { ...r, status: bForRoom.status === 'ACTIVE' ? RoomStatus.OCCUPIED : RoomStatus.RESERVED, currentBookingId: bForRoom.id };
       return r;
     });
-    setRooms(updatedRooms);
-    await syncToDB(db.rooms, updatedRooms, 'rooms');
-    
-    setShowCheckinForm(false);
-    setShowReservationForm(false);
-    setShowRoomActions(false);
-    setIsMultiSelectMode(false);
-    setSelectedRoomIdsForBulk([]);
+    updateRooms(updatedRooms);
+    setShowCheckinForm(false); setShowReservationForm(false); setShowRoomActions(false);
   };
 
   const handleBookingUpdate = (updatedBooking: Booking) => {
@@ -257,35 +274,13 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleRoomStatusUpdate = (roomId: string, newStatus: RoomStatus) => {
-    const updatedRooms = rooms.map(r => r.id === roomId ? { ...r, status: newStatus } : r);
-    updateRooms(updatedRooms);
-    setShowRoomActions(false);
+  const handleLogin = (role: UserRole) => {
+    setCurrentUserRole(role);
+    setIsLoggedIn(true);
   };
 
-  const handleGuestSave = (guest: Guest) => {
-    updateGuests(guests.map(g => g.id === guest.id ? guest : g));
-  };
-
-  const handleBulkCheckIn = () => {
-    if (selectedRoomIdsForBulk.length === 0) return;
-    const baseRoom = rooms.find(r => r.id === selectedRoomIdsForBulk[0]);
-    if (baseRoom) {
-      setSelectedRoom(baseRoom);
-      setShowCheckinForm(true);
-    }
-  };
-
-  const handleBulkStatusUpdate = (status: RoomStatus) => {
-    const updatedRooms = rooms.map(r => selectedRoomIdsForBulk.includes(r.id) ? { ...r, status } : r);
-    updateRooms(updatedRooms);
-    setSelectedRoomIdsForBulk([]);
-    setIsMultiSelectMode(false);
-  };
-
-  if (isLoading) {
-    return <div className="min-h-screen bg-[#003d80] flex items-center justify-center text-white font-black uppercase tracking-widest">Initializing HotelSphere...</div>;
-  }
+  if (isLoading) return <div className="min-h-screen bg-[#003d80] flex items-center justify-center text-white font-black uppercase tracking-widest">Initializing HotelSphere...</div>;
+  if (!isLoggedIn) return <Login onLogin={handleLogin} settings={settings} />;
 
   const renderContent = () => {
     if (activeBookingId) {
@@ -293,129 +288,59 @@ const App: React.FC = () => {
       const g = b ? guests.find(g => g.id === b.guestId) : null;
       const r = b ? rooms.find(r => r.id === b.roomId) : null;
       if (!b || !g || !r) return null;
-      return <StayManagement booking={b} guest={g} room={r} allRooms={rooms} allBookings={bookings} settings={settings} onUpdate={handleBookingUpdate} onAddPayment={(p) => handleAddPayment(b.id, p)} onUpdateGuest={handleGuestSave} onShiftRoom={() => {}} onClose={() => setActiveBookingId(null)} />;
+      return <StayManagement booking={b} guest={g} room={r} allRooms={rooms} allBookings={bookings} settings={settings} onUpdate={handleBookingUpdate} onAddPayment={(p) => handleAddPayment(b.id, p)} onUpdateGuest={(gu) => updateGuests(guests.map(x => x.id === gu.id ? gu : x))} onShiftRoom={() => {}} onClose={() => setActiveBookingId(null)} />;
     }
 
-    if (showCheckinForm && selectedRoom) {
-      return (
-        <GuestCheckin 
-          room={selectedRoom} 
-          allRooms={rooms} 
-          existingGuests={guests} 
-          onClose={() => setShowCheckinForm(false)} 
-          onSave={handleCheckinSave} 
-          settings={settings}
-          initialSelectedRoomIds={selectedRoomIdsForBulk.length > 0 ? selectedRoomIdsForBulk : [selectedRoom.id]}
-          onSwitchToReservation={() => {
-            setShowCheckinForm(false);
-            setShowReservationForm(true);
-          }}
-        />
-      );
-    }
-
-    if (showReservationForm) {
-      return <ReservationEntry rooms={rooms} existingGuests={guests} onClose={() => setShowReservationForm(false)} onSave={(data) => {
+    if (showCheckinForm && selectedRoom) return <GuestCheckin room={selectedRoom} allRooms={rooms} existingGuests={guests} onClose={() => setShowCheckinForm(false)} onSave={handleCheckinSave} settings={settings} onSwitchToReservation={() => { setShowCheckinForm(false); setShowReservationForm(true); }} />;
+    if (showReservationForm) return <ReservationEntry rooms={rooms} existingGuests={guests} onClose={() => setShowReservationForm(false)} onSave={(data) => {
         const bookingsData = data.roomIds.map(rid => ({
-          bookingNo: data.bookingNo,
-          roomId: rid,
-          checkInDate: data.checkInDate,
-          checkInTime: data.checkInTime,
-          checkOutDate: data.checkOutDate,
-          checkOutTime: data.checkOutTime,
-          status: 'RESERVED',
-          basePrice: rooms.find(room => room.id === rid)?.price || 0,
-          mealPlan: data.mealPlan,
-          agent: data.agent,
-          discount: data.discount,
-          charges: [],
-          payments: [],
-          purpose: data.purpose
+          bookingNo: data.bookingNo, roomId: rid, checkInDate: data.checkInDate, checkInTime: data.checkInTime, checkOutDate: data.checkOutDate, checkOutTime: data.checkOutTime,
+          status: 'RESERVED', basePrice: rooms.find(room => room.id === rid)?.price || 0, mealPlan: data.mealPlan, agent: data.agent, discount: data.discount,
+          charges: [], payments: [], purpose: data.purpose
         }));
         handleCheckinSave({ guest: data.guest, bookings: bookingsData });
       }} settings={settings} />;
-    }
 
     switch (activeTab) {
       case 'GROUP': return <GroupModule groups={groups} setGroups={updateGroups} rooms={rooms} bookings={bookings} setBookings={updateBookings} guests={guests} setGuests={updateGuests} setRooms={updateRooms} onAddTransaction={(tx) => updateTransactions([...transactions, tx])} />;
       case 'REPORTS': return <Reports bookings={bookings} guests={guests} rooms={rooms} settings={settings} transactions={transactions} shiftLogs={shiftLogs} cleaningLogs={cleaningLogs} quotations={quotations} />;
       case 'ACCOUNTING': return <Accounting transactions={transactions} setTransactions={updateTransactions} guests={guests} bookings={bookings} quotations={quotations} setQuotations={updateQuotations} settings={settings} />;
       case 'SETTINGS': return <Settings settings={settings} setSettings={updateSettings} rooms={rooms} setRooms={updateRooms} />;
-      case 'DASHBOARD':
       default:
         return (
           <div className="p-6 pb-24 text-black">
             <div className="flex justify-between items-center mb-8 no-print">
               <div className="flex items-center gap-6">
-                <h1 className="text-2xl font-black text-black border-l-8 border-blue-600 pl-4 uppercase">Front Desk Console</h1>
-                <button 
-                  onClick={() => {
-                    setIsMultiSelectMode(!isMultiSelectMode);
-                    setSelectedRoomIdsForBulk([]);
-                  }}
-                  className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${isMultiSelectMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-600'}`}
-                >
-                  {isMultiSelectMode ? 'Exit Selection Mode' : 'Multiple Check-in Mode'}
-                </button>
+                <h1 className="text-2xl font-black text-black border-l-8 border-blue-600 pl-4 uppercase">{currentUserRole} Front Desk</h1>
+                {currentUserRole !== 'SUPERVISOR' && (
+                   <button onClick={() => { setIsMultiSelectMode(!isMultiSelectMode); setSelectedRoomIdsForBulk([]); }} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase border-2 transition-all ${isMultiSelectMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-600'}`}>Multiple Check-in</button>
+                )}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setShowReservationForm(true)} className="bg-orange-500 text-white px-6 py-3 rounded-xl font-black text-xs uppercase shadow-xl hover:bg-orange-600 transition-all">+ New Reservation</button>
-                <button onClick={() => handleTabChange('GROUP')} className="bg-blue-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase shadow-xl hover:bg-black transition-all">Group Bookings</button>
+                {currentUserRole !== 'SUPERVISOR' && (
+                  <>
+                    <button onClick={() => setShowReservationForm(true)} className="bg-orange-500 text-white px-6 py-3 rounded-xl font-black text-xs uppercase shadow-xl hover:bg-orange-600 transition-all">+ New Reservation</button>
+                    <button onClick={() => handleTabChange('GROUP')} className="bg-blue-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase shadow-xl hover:bg-black">Group Bookings</button>
+                  </>
+                )}
               </div>
             </div>
             
-            {isMultiSelectMode && selectedRoomIdsForBulk.length > 0 && (
-              <div className="mb-6 bg-white p-6 rounded-[2rem] border-2 border-blue-600 shadow-xl flex items-center justify-between animate-in slide-in-from-top-4 duration-300 no-print">
-                <div className="flex items-center gap-4">
-                  <div className="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center font-black">
-                    {selectedRoomIdsForBulk.length}
-                  </div>
-                  <span className="font-black uppercase text-xs tracking-widest">Rooms Selected</span>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={handleBulkCheckIn} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">Bulk Check-in</button>
-                  <button onClick={() => handleBulkStatusUpdate(RoomStatus.VACANT)} className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">Set Vacant</button>
-                  <button onClick={() => handleBulkStatusUpdate(RoomStatus.DIRTY)} className="bg-red-600 text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg">Set Dirty</button>
-                  <button onClick={() => setSelectedRoomIdsForBulk([])} className="bg-gray-100 text-gray-500 px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest">Clear</button>
-                </div>
-              </div>
-            )}
-
             <div className="space-y-10">
-              {/* Fix: Cast Object.entries to correct type to avoid mapping errors on 'unknown' types */}
               {(Object.entries(roomsByFloor) as [string, Room[]][]).sort().map(([floor, floorRooms]) => (
                 <div key={floor} className="bg-white rounded-[2rem] shadow-sm border overflow-hidden">
                   <div className="bg-blue-50 px-8 py-3 font-black text-black uppercase text-[10px] tracking-widest border-b">Floor Level {floor}</div>
                   <div className="p-8 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-4">
                     {floorRooms.map(room => {
                       const activeB = bookings.find(b => (b.roomId === room.id || b.id === room.currentBookingId) && (b.status === 'ACTIVE' || b.status === 'RESERVED'));
-                      
                       const isBooked = room.status === RoomStatus.OCCUPIED || room.status === RoomStatus.RESERVED;
                       const bookingClasses = (isBooked && activeB) ? getBookingColorClasses(activeB) : STATUS_COLORS[room.status];
-                      const isSelected = selectedRoomIdsForBulk.includes(room.id);
-
                       return (
-                        <button 
-                          key={room.id} 
-                          onClick={() => handleRoomClick(room)} 
-                          className={`min-h-[140px] border-2 rounded-2xl p-4 flex flex-col items-center justify-between transition-all shadow-sm group relative ${bookingClasses} ${isSelected ? 'ring-4 ring-blue-600 ring-offset-2 scale-105 z-10' : 'hover:scale-105 active:scale-95'}`}
-                        >
-                          {isSelected && (
-                            <div className="absolute -top-3 -right-3 bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            </div>
-                          )}
+                        <button key={room.id} onClick={() => handleRoomClick(room)} className={`min-h-[140px] border-2 rounded-2xl p-4 flex flex-col items-center justify-between transition-all shadow-sm ${bookingClasses} hover:scale-105 active:scale-95`}>
                           <span className="text-2xl font-black tracking-tighter uppercase">ROOM {room.number}</span>
                           <div className="text-center w-full">
                             <div className="text-[9px] font-black uppercase mb-1 opacity-80">{room.type}</div>
-                            <div className={`text-[8px] font-bold uppercase py-0.5 px-3 rounded-full border border-current inline-block`}>
-                              {room.status}
-                            </div>
-                            {activeB && (
-                              <div className="text-[8px] font-black bg-white/60 p-1.5 rounded-lg mt-2 uppercase border border-current/20 shadow-sm truncate">
-                                {activeB.bookingNo}
-                              </div>
-                            )}
+                            <div className={`text-[8px] font-bold uppercase py-0.5 px-3 rounded-full border border-current inline-block`}>{room.status}</div>
                           </div>
                         </button>
                       );
@@ -439,12 +364,20 @@ const App: React.FC = () => {
           </div>
           <div className="flex gap-1">
             <NavBtn label="Dashboard" active={activeTab === 'DASHBOARD'} onClick={() => handleTabChange('DASHBOARD')} />
-            <NavBtn label="Groups" active={activeTab === 'GROUP'} onClick={() => handleTabChange('GROUP')} />
-            <NavBtn label="Accounting" active={activeTab === 'ACCOUNTING'} onClick={() => handleTabChange('ACCOUNTING')} />
-            <NavBtn label="Reports" active={activeTab === 'REPORTS'} onClick={() => handleTabChange('REPORTS')} />
+            {['ADMIN', 'RECEPTIONIST'].includes(currentUserRole) && <NavBtn label="Groups" active={activeTab === 'GROUP'} onClick={() => handleTabChange('GROUP')} />}
+            {['ADMIN', 'ACCOUNTANT'].includes(currentUserRole) && (
+              <>
+                <NavBtn label="Accounting" active={activeTab === 'ACCOUNTING'} onClick={() => handleTabChange('ACCOUNTING')} />
+                <NavBtn label="Reports" active={activeTab === 'REPORTS'} onClick={() => handleTabChange('REPORTS')} />
+              </>
+            )}
           </div>
         </div>
-        <button onClick={() => handleTabChange('SETTINGS')} className="px-6 py-2 bg-white/10 rounded-xl font-black text-[10px] uppercase hover:bg-white/20 transition-all border border-white/20">System Settings</button>
+        <div className="flex items-center gap-4">
+          <span className="text-[10px] font-black uppercase bg-white/10 px-3 py-1 rounded-full">{currentUserRole}</span>
+          <button onClick={() => setIsLoggedIn(false)} className="text-[10px] font-black uppercase text-white/50 hover:text-white">Logout</button>
+          {currentUserRole === 'ADMIN' && <button onClick={() => handleTabChange('SETTINGS')} className="px-6 py-2 bg-white/10 rounded-xl font-black text-[10px] uppercase border border-white/20">System Settings</button>}
+        </div>
       </nav>
 
       <main className="flex-1 overflow-y-auto custom-scrollbar">{renderContent()}</main>
@@ -452,11 +385,9 @@ const App: React.FC = () => {
       <footer className="bg-white border-t px-8 py-3 flex justify-between items-center fixed bottom-0 w-full z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] no-print">
         <div className="flex gap-8 overflow-x-auto no-scrollbar py-1">
           <Stat label="Total" count={stats.total} color="text-black" />
-          <Stat label="Vacant" count={stats.vacant} color="text-black" />
-          <Stat label="Occupied" count={stats.occupied} color="text-black" />
-          <Stat label="Reserved" count={stats.reserved} color="text-black" />
-          <Stat label="Dirty" count={stats.dirty} color="text-black" />
-          <Stat label="Repair" count={stats.repair} color="text-black" />
+          <Stat label="Vacant" count={stats.vacant} color="text-green-600" />
+          <Stat label="Occupied" count={stats.occupied} color="text-blue-600" />
+          <Stat label="Dirty" count={stats.dirty} color="text-red-600" />
         </div>
         <div className="flex items-center gap-2 ml-4 whitespace-nowrap">
           <div className="w-2 h-2 rounded-full bg-green-500 db-sync-pulse"></div>
@@ -464,12 +395,7 @@ const App: React.FC = () => {
         </div>
       </footer>
       {showRoomActions && selectedRoom && (
-        <RoomActionModal 
-          room={selectedRoom} 
-          onClose={() => setShowRoomActions(false)} 
-          onCheckIn={() => { setShowRoomActions(false); setShowCheckinForm(true); }}
-          onStatusUpdate={(s) => handleRoomStatusUpdate(selectedRoom.id, s)}
-        />
+        <RoomActionModal room={selectedRoom} onClose={() => setShowRoomActions(false)} onCheckIn={() => { setShowRoomActions(false); setShowCheckinForm(true); }} onStatusUpdate={(s) => { updateRooms(rooms.map(r => r.id === selectedRoom.id ? { ...r, status: s } : r)); setShowRoomActions(false); }} />
       )}
     </div>
   );

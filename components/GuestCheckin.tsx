@@ -35,15 +35,22 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
     nationality: 'Indian',
     documents: {}
   });
+
+  const [checkInDate, setCheckInDate] = useState(new Date().toISOString().split('T')[0]);
+  const [checkInTime, setCheckInTime] = useState(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+  const [checkOutDate, setCheckOutDate] = useState(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
+  const [checkOutTime, setCheckOutTime] = useState('11:00');
+
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>(initialSelectedRoomIds.length > 0 ? initialSelectedRoomIds : [room.id]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const handleSearchGuest = () => {
+    if (!guest.phone) return;
     const found = existingGuests.find(g => g.phone === guest.phone);
     if (found) {
-      setGuest(found);
+      setGuest({ ...found });
     } else {
-      console.log("No previous record found for this mobile number.");
+      alert("No previous record found for this mobile number.");
     }
   };
 
@@ -70,10 +77,10 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
     const bookings = selectedRoomIds.map(rid => ({
       bookingNo: 'BK-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
       roomId: rid,
-      checkInDate: new Date().toISOString().split('T')[0],
-      checkInTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-      checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Default 1 day
-      checkOutTime: '11:00',
+      checkInDate: checkInDate,
+      checkInTime: checkInTime,
+      checkOutDate: checkOutDate,
+      checkOutTime: checkOutTime,
       status: 'ACTIVE',
       basePrice: allRooms.find(r => r.id === rid)?.price || 0,
       charges: [],
@@ -102,7 +109,10 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
             <section className="space-y-4">
               <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Primary Guest Information</h3>
               <div className="grid grid-cols-2 gap-4">
-                <Inp label="Mobile Number *" value={guest.phone} onChange={(v: string) => setGuest({...guest, phone: v})} onBlur={handleSearchGuest} />
+                <div className="flex gap-2 items-end">
+                  <Inp label="Mobile Number *" value={guest.phone} onChange={(v: string) => setGuest({...guest, phone: v})} />
+                  <button onClick={handleSearchGuest} className="bg-blue-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase mb-0.5 shadow-lg">Fetch</button>
+                </div>
                 <Inp label="Full Name *" value={guest.name} onChange={(v: string) => setGuest({...guest, name: v})} />
                 <Inp label="Email Address" value={guest.email} onChange={(v: string) => setGuest({...guest, email: v})} />
                 <div className="space-y-1">
@@ -118,6 +128,16 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
                 value={guest.address} 
                 onChange={e => setGuest({...guest, address: e.target.value})} 
               />
+            </section>
+
+            <section className="space-y-4">
+               <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Stay Schedule</h3>
+               <div className="grid grid-cols-2 gap-4">
+                  <Inp label="Arrival Date" type="date" value={checkInDate} onChange={setCheckInDate} />
+                  <Inp label="Arrival Time" type="time" value={checkInTime} onChange={setCheckInTime} />
+                  <Inp label="Departure Date" type="date" value={checkOutDate} onChange={setCheckOutDate} />
+                  <Inp label="Departure Time" type="time" value={checkOutTime} onChange={setCheckOutTime} />
+               </div>
             </section>
 
             <section className="space-y-4">
@@ -166,7 +186,7 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
 };
 
 const Inp = ({ label, value, onChange, onBlur, type = "text" }: any) => (
-  <div className="space-y-1">
+  <div className="space-y-1 w-full">
     <label className="text-[10px] font-black uppercase text-slate-400 ml-1">{label}</label>
     <input 
       type={type} 

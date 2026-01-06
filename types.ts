@@ -9,6 +9,15 @@ export enum RoomStatus {
   STAFF_BLOCK = 'STAFF_BLOCK'
 }
 
+export type UserRole = 'ADMIN' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SUPERVISOR';
+
+export interface User {
+  id: string;
+  username: string;
+  role: UserRole;
+  password?: string;
+}
+
 export enum RoomType {
   DELUXE = 'DELUXE ROOM',
   BUDGET = 'BUDGET ROOM',
@@ -184,6 +193,11 @@ export interface HostelSettings {
   agents: AgentConfig[];
   roomTypes: string[];
   gstNumber?: string;
-  taxRate?: number; // Added default tax rate
-  hsnCode?: string; // Added default HSN code
+  taxRate?: number;
+  hsnCode?: string;
+  upiId?: string;
+  adminPassword?: string;
+  receptionistPassword?: string;
+  accountantPassword?: string;
+  supervisorPassword?: string;
 }

@@ -16,7 +16,8 @@ export class HotelSphereDB extends Dexie {
   constructor() {
     super('HotelSphereDB');
     // Ensure Dexie versioning is configured on the instance
-    this.version(2).stores({
+    // FIX: Using 'any' cast to bypass false-positive "Property 'version' does not exist" error
+    (this as any).version(2).stores({
       rooms: 'id, number, status, type',
       guests: 'id, name, phone, email',
       bookings: 'id, bookingNo, roomId, guestId, status, checkInDate, checkOutDate, groupBookingId, groupId',
@@ -59,7 +60,8 @@ export async function importDatabase(jsonFile: File) {
       try {
         const data = JSON.parse(e.target?.result as string);
         // Correct usage of instance-level transaction management
-        await db.transaction('rw', [db.rooms, db.guests, db.bookings, db.transactions, db.shiftLogs, db.cleaningLogs, db.quotations, db.settings, db.groups], async () => {
+        // FIX: Using 'any' cast to resolve "Property 'transaction' does not exist" error and avoid confusion with 'transactions' table property
+        await (db as any).transaction('rw', [db.rooms, db.guests, db.bookings, db.transactions, db.shiftLogs, db.cleaningLogs, db.quotations, db.settings, db.groups], async () => {
           if (data.rooms) { await db.rooms.clear(); await db.rooms.bulkAdd(data.rooms); }
           if (data.guests) { await db.guests.clear(); await db.guests.bulkAdd(data.guests); }
           if (data.bookings) { await db.bookings.clear(); await db.bookings.bulkAdd(data.bookings); }
