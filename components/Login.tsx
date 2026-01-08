@@ -1,36 +1,46 @@
 
 import React, { useState } from 'react';
-import { UserRole, HostelSettings } from '../types.ts';
+import { UserRole, HostelSettings, Supervisor } from '../types.ts';
 
 interface LoginProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: (role: UserRole, supervisor?: Supervisor) => void;
   settings: HostelSettings;
+  supervisors: Supervisor[];
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, settings, supervisors }) => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('RECEPTIONIST');
+  const [username, setUsername] = useState(''); // Only used for individual accounts like Supervisor
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Super Admin Master Check (Bypass settings for master key)
+    // Super Admin Master Check
     if (selectedRole === 'SUPERADMIN' && password === 'Durgamaa@18') {
        onLogin('SUPERADMIN');
        return;
     }
 
-    // Role-specific validation
+    // Individual Supervisor lookup
+    if (selectedRole === 'SUPERVISOR') {
+      const sup = supervisors.find(s => s.loginId === username && s.password === password && s.status === 'ACTIVE');
+      if (sup) {
+        onLogin('SUPERVISOR', sup);
+        return;
+      }
+    }
+
+    // Role-specific validation (Global Keys)
     let correctPassword = settings.adminPassword || 'admin';
     if (selectedRole === 'RECEPTIONIST') correctPassword = settings.receptionistPassword || 'receptionist';
     if (selectedRole === 'ACCOUNTANT') correctPassword = settings.accountantPassword || 'accountant';
-    if (selectedRole === 'SUPERVISOR') correctPassword = settings.supervisorPassword || 'supervisor';
 
-    if (password === correctPassword) {
+    if (selectedRole !== 'SUPERVISOR' && password === correctPassword) {
       onLogin(selectedRole);
     } else {
-      setError('Invalid role password or unauthorized access attempt');
+      setError('Invalid credentials or unauthorized access attempt');
     }
   };
 
@@ -59,6 +69,19 @@ const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
               ))}
             </div>
           </div>
+
+          {selectedRole === 'SUPERVISOR' && (
+            <div className="space-y-2 animate-in fade-in duration-300">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Login ID</label>
+              <input
+                type="text"
+                className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner text-black"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Supervisor ID"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Tier Password</label>

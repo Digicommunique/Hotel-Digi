@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Room, Guest, Booking, HostelSettings, Payment } from '../types.ts';
 import { INDIAN_STATES } from '../constants.tsx';
@@ -34,11 +33,12 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
     city: '',
     state: 'Maharashtra',
     nationality: 'Indian',
+    idType: 'Aadhar',
     idNumber: '',
     adults: 1,
     children: 0,
     kids: 0,
-    others: 0, // Used for Extra Bed
+    others: 0, 
     documents: {}
   });
 
@@ -130,9 +130,12 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
       remarks: 'Advance during check-in'
     }] : [];
 
+    const sessionGroupId = selectedRoomIds.length > 1 ? 'GRP-' + Math.random().toString(36).substr(2, 6).toUpperCase() : undefined;
+
     const bookings = selectedRoomIds.map(rid => ({
       bookingNo: 'BK-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
       roomId: rid,
+      groupId: sessionGroupId,
       checkInDate, checkInTime, checkOutDate, checkOutTime,
       status: 'ACTIVE',
       basePrice: rid === room.id ? roomTariff : (allRooms.find(r => r.id === rid)?.price || 0),
@@ -146,18 +149,16 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
     onSave({ guest, bookings });
   };
 
-  const totalPax = (guest.adults || 0) + (guest.children || 0) + (guest.kids || 0) + (guest.others || 0);
-
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-7xl rounded-[3rem] shadow-2xl flex flex-col h-[92vh] overflow-hidden">
-        <div className="bg-[#003d80] p-8 text-white flex justify-between items-center no-print">
+        <div className="bg-[#003d80] p-8 text-white flex justify-between items-center no-print flex-shrink-0">
           <div>
-            <h2 className="text-3xl font-black uppercase tracking-tighter">Guest Registration & Check-in</h2>
-            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Property Management Console | Room {room.number}</p>
+            <h2 className="text-3xl font-black uppercase tracking-tighter">Guest Registration</h2>
+            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Room {room.number} | Global Intake</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowGRCPreview(true)} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-black transition-all">Print GRC Form</button>
+            <button onClick={() => setShowGRCPreview(true)} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-black transition-all">Print GRC</button>
             <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
@@ -166,23 +167,23 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
 
         <div className="flex-1 overflow-y-auto p-10 grid grid-cols-1 lg:grid-cols-4 gap-10 custom-scrollbar no-print">
           <div className="lg:col-span-3 space-y-8">
-            <div className="flex gap-1 border-b pb-4">
-              <button onClick={() => setActiveSection('BASIC')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'BASIC' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Basic Info</button>
-              <button onClick={() => setActiveSection('OCCUPANTS')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'OCCUPANTS' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Second Occupant</button>
-              <button onClick={() => setActiveSection('DOCUMENTS')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'DOCUMENTS' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>KYC Vault</button>
-              <button onClick={() => setActiveSection('GRC')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'GRC' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Form-C Details</button>
+            <div className="flex gap-1 border-b pb-4 sticky top-0 bg-white z-10">
+              <button onClick={() => setActiveSection('BASIC')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'BASIC' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Guest Info</button>
+              <button onClick={() => setActiveSection('OCCUPANTS')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'OCCUPANTS' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Occupants</button>
+              <button onClick={() => setActiveSection('DOCUMENTS')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'DOCUMENTS' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Documents</button>
+              <button onClick={() => setActiveSection('GRC')} className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${activeSection === 'GRC' ? 'bg-blue-900 text-white' : 'bg-slate-50 text-slate-400'}`}>Form-C</button>
             </div>
 
             {activeSection === 'BASIC' && (
               <div className="space-y-8">
                 <section className="space-y-4">
-                  <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Primary Guest Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex gap-2 items-end">
+                  <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Identification Profile</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex gap-2 items-end col-span-2">
                       <Inp label="Mobile Number *" value={guest.phone} onChange={(v: string) => setGuest({...guest, phone: v})} />
-                      <button onClick={handleSearchGuest} className="bg-blue-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase mb-0.5 shadow-lg">Fetch</button>
+                      <button onClick={handleSearchGuest} className="bg-blue-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase mb-0.5 shadow-lg">Find</button>
                     </div>
-                    <Inp label="Full Name *" value={guest.name} onChange={(v: string) => setGuest({...guest, name: v})} />
+                    <Inp label="Nationality" value={guest.nationality} onChange={(v: string) => setGuest({...guest, nationality: v})} />
                     <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Gender</label>
                       <select className="w-full border-2 p-3 rounded-2xl text-[12px] font-black bg-slate-50 outline-none" value={guest.gender} onChange={e => setGuest({...guest, gender: e.target.value as any})}>
@@ -191,27 +192,40 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
                         <option value="Other">Other</option>
                       </select>
                     </div>
-                    <Inp label="ID Number (Aadhar/Pass)" value={guest.idNumber} onChange={(v: string) => setGuest({...guest, idNumber: v})} />
+                    <div className="col-span-2">
+                       <Inp label="Full Name *" value={guest.name} onChange={(v: string) => setGuest({...guest, name: v})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Document Type</label>
+                      <select className="w-full border-2 p-3 rounded-2xl text-[12px] font-black bg-slate-50 outline-none" value={guest.idType} onChange={e => setGuest({...guest, idType: e.target.value as any})}>
+                        <option value="Aadhar">Aadhar Card</option>
+                        <option value="Passport">Passport</option>
+                        <option value="PAN">PAN Card</option>
+                        <option value="VoterId">Voter ID</option>
+                        <option value="License">Driving License</option>
+                        <option value="Other">Other ID</option>
+                      </select>
+                    </div>
+                    <Inp label="ID Number" value={guest.idNumber} onChange={(v: string) => setGuest({...guest, idNumber: v})} />
                   </div>
                 </section>
 
                 <section className="space-y-4">
-                  <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Check-in / Check-out Schedule (Auto-populated)</h3>
+                  <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Stay Timeline</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Inp label="Arrival Date" type="date" value={checkInDate} onChange={setCheckInDate} />
                     <Inp label="Arrival Time" type="time" value={checkInTime} onChange={setCheckInTime} />
-                    <Inp label="Departure Date" type="date" value={checkOutDate} onChange={setCheckOutDate} />
-                    <Inp label="Departure Time" type="time" value={checkOutTime} onChange={setCheckOutTime} />
+                    <Inp label="Exp. Departure" type="date" value={checkOutDate} onChange={setCheckOutDate} />
+                    <Inp label="Check-Out Time" type="time" value={checkOutTime} onChange={setCheckOutTime} />
                   </div>
                 </section>
 
                 <section className="space-y-4">
-                  <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Occupancy Details</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Inp label="Adults" type="number" value={guest.adults?.toString()} onChange={(v: string) => setGuest({...guest, adults: parseInt(v) || 0})} />
-                    <Inp label="Children" type="number" value={guest.children?.toString()} onChange={(v: string) => setGuest({...guest, children: parseInt(v) || 0})} />
-                    <Inp label="Kids" type="number" value={guest.kids?.toString()} onChange={(v: string) => setGuest({...guest, kids: parseInt(v) || 0})} />
-                    <Inp label="Extra Bed Count" type="number" value={guest.others?.toString()} onChange={(v: string) => setGuest({...guest, others: parseInt(v) || 0})} />
+                  <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Unit Assignment</h3>
+                  <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                     {allRooms.map(r => (
+                        <button key={r.id} onClick={() => setSelectedRoomIds(prev => prev.includes(r.id) ? prev.filter(x => x !== r.id) : [...prev, r.id])} className={`p-3 rounded-xl border-2 font-black text-[10px] uppercase transition-all ${selectedRoomIds.includes(r.id) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-blue-200'}`}>{r.number}</button>
+                     ))}
                   </div>
                 </section>
               </div>
@@ -219,9 +233,9 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
 
             {activeSection === 'OCCUPANTS' && (
               <section className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Secondary Guest Profile</h3>
+                <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Secondary Resident</h3>
                 <div className="grid grid-cols-2 gap-6">
-                  <Inp label="2nd Occupant Name" value={secondaryGuest.name} onChange={(v: string) => setSecondaryGuest({...secondaryGuest, name: v})} />
+                  <Inp label="Full Name" value={secondaryGuest.name} onChange={(v: string) => setSecondaryGuest({...secondaryGuest, name: v})} />
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Gender</label>
                     <select className="w-full border-2 p-3 rounded-2xl text-[12px] font-black bg-slate-50 outline-none" value={secondaryGuest.gender} onChange={e => setSecondaryGuest({...secondaryGuest, gender: e.target.value as any})}>
@@ -233,13 +247,13 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <DocBox 
-                    label="2nd Guest ID Front" 
+                    label="Secondary ID Front" 
                     src={secondaryGuest.documents.aadharFront} 
                     onChange={(e: any) => handleFileUpload(e, 'aadharFront', true)} 
                     onCapture={() => { setActiveDocCapture({ type: 'aadharFront', isSecondary: true }); setIsCameraOpen(true); }}
                   />
                   <DocBox 
-                    label="2nd Guest ID Back" 
+                    label="Secondary ID Back" 
                     src={secondaryGuest.documents.aadharBack} 
                     onChange={(e: any) => handleFileUpload(e, 'aadharBack', true)} 
                     onCapture={() => { setActiveDocCapture({ type: 'aadharBack', isSecondary: true }); setIsCameraOpen(true); }}
@@ -250,18 +264,14 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
 
             {activeSection === 'DOCUMENTS' && (
               <section className="space-y-8 animate-in fade-in duration-300">
-                <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Multi-Document Identification Registry</h3>
+                <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">KYC Document Uploads</h3>
                 <div className="grid grid-cols-3 gap-4">
-                   <DocBox label="Aadhar Front" src={guest.documents?.aadharFront} onChange={(e) => handleFileUpload(e, 'aadharFront')} onCapture={() => { setActiveDocCapture({type:'aadharFront', isSecondary:false}); setIsCameraOpen(true); }} />
-                   <DocBox label="Aadhar Back" src={guest.documents?.aadharBack} onChange={(e) => handleFileUpload(e, 'aadharBack')} onCapture={() => { setActiveDocCapture({type:'aadharBack', isSecondary:false}); setIsCameraOpen(true); }} />
-                   <DocBox label="PAN Card" src={guest.documents?.pan} onChange={(e) => handleFileUpload(e, 'pan')} onCapture={() => { setActiveDocCapture({type:'pan', isSecondary:false}); setIsCameraOpen(true); }} />
-                   <DocBox label="Passport Front" src={guest.documents?.passportFront} onChange={(e) => handleFileUpload(e, 'passportFront')} onCapture={() => { setActiveDocCapture({type:'passportFront', isSecondary:false}); setIsCameraOpen(true); }} />
-                   <DocBox label="Passport Back" src={guest.documents?.passportBack} onChange={(e) => handleFileUpload(e, 'passportBack')} onCapture={() => { setActiveDocCapture({type:'passportBack', isSecondary:false}); setIsCameraOpen(true); }} />
-                   <DocBox label="Driving License" src={guest.documents?.drivingLicense} onChange={(e) => handleFileUpload(e, 'drivingLicense')} onCapture={() => { setActiveDocCapture({type:'drivingLicense', isSecondary:false}); setIsCameraOpen(true); }} />
-                   <DocBox label="Voter ID" src={guest.documents?.voterId} onChange={(e) => handleFileUpload(e, 'voterId')} onCapture={() => { setActiveDocCapture({type:'voterId', isSecondary:false}); setIsCameraOpen(true); }} />
+                   <DocBox label="ID/Aadhar Front" src={guest.documents?.aadharFront} onChange={(e: any) => handleFileUpload(e, 'aadharFront')} onCapture={() => { setActiveDocCapture({type:'aadharFront', isSecondary:false}); setIsCameraOpen(true); }} />
+                   <DocBox label="ID/Aadhar Back" src={guest.documents?.aadharBack} onChange={(e: any) => handleFileUpload(e, 'aadharBack')} onCapture={() => { setActiveDocCapture({type:'aadharBack', isSecondary:false}); setIsCameraOpen(true); }} />
+                   <DocBox label="Passport/Alt ID" src={guest.documents?.passportFront} onChange={(e: any) => handleFileUpload(e, 'passportFront')} onCapture={() => { setActiveDocCapture({type:'passportFront', isSecondary:false}); setIsCameraOpen(true); }} />
                    <div className="flex flex-col items-center justify-center gap-2 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-4">
-                    {guest.documents?.photo ? <img src={guest.documents.photo} className="w-16 h-16 rounded-full object-cover shadow-md" /> : <div className="text-[8px] font-black text-slate-300">GUEST PHOTO</div>}
-                    <button onClick={() => { setActiveDocCapture({type:'photo', isSecondary:false}); setIsCameraOpen(true); }} className="text-[9px] font-black text-blue-600 uppercase underline">Capture Guest</button>
+                    {guest.documents?.photo ? <img src={guest.documents.photo} className="w-16 h-16 rounded-full object-cover" /> : <div className="text-[8px] font-black text-slate-300">RESIDENT PHOTO</div>}
+                    <button onClick={() => { setActiveDocCapture({type:'photo', isSecondary:false}); setIsCameraOpen(true); }} className="text-[9px] font-black text-blue-600 uppercase underline">Snap Live</button>
                   </div>
                 </div>
               </section>
@@ -269,23 +279,21 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
 
             {activeSection === 'GRC' && (
               <section className="space-y-6 animate-in fade-in duration-300">
-                <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">International / Extended Module</h3>
+                <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Mandatory Form-C Details</h3>
                 <div className="grid grid-cols-3 gap-4">
-                  <Inp label="Sur Name" value={guest.surName} onChange={(v: string) => setGuest({...guest, surName: v})} />
-                  <Inp label="Given Name" value={guest.givenName} onChange={(v: string) => setGuest({...guest, givenName: v})} />
-                  <Inp label="Passport Number" value={guest.passportNo} onChange={(v: string) => setGuest({...guest, passportNo: v})} />
-                  <Inp label="Visa Number" value={guest.visaNo} onChange={(v: string) => setGuest({...guest, visaNo: v})} />
-                  <Inp label="Purpose Of Visit" value={guest.purposeOfVisit} onChange={(v: string) => setGuest({...guest, purposeOfVisit: v})} />
+                  <Inp label="Travelled From" value={guest.arrivalFrom} onChange={(v: string) => setGuest({...guest, arrivalFrom: v})} />
+                  <Inp label="Next Destination" value={guest.nextDestination} onChange={(v: string) => setGuest({...guest, nextDestination: v})} />
+                  <Inp label="Purpose of Stay" value={guest.purposeOfVisit} onChange={(v: string) => setGuest({...guest, purposeOfVisit: v})} />
                 </div>
               </section>
             )}
           </div>
 
-          <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100 space-y-6">
-            <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Billing & Meals</h3>
+          <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100 space-y-6 flex-shrink-0">
+            <h3 className="font-black text-xs uppercase text-slate-400 tracking-widest border-b pb-2">Financial Summary</h3>
             <div className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Meal Plan</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Plan</label>
                 <select className="w-full border-2 p-3 rounded-2xl text-[12px] font-black bg-white outline-none" value={mealPlan} onChange={e => setMealPlan(e.target.value)}>
                   <option value="EP (Room Only)">EP (Room Only)</option>
                   <option value="CP (Room + B/Fast)">CP (Room + B/Fast)</option>
@@ -293,25 +301,21 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
                   <option value="AP (Room + All Meals)">AP (Room + All Meals)</option>
                 </select>
               </div>
-              <Inp label="Room Tariff (Per Night)" type="number" value={roomTariff.toString()} onChange={(v: string) => setRoomTariff(parseFloat(v) || 0)} />
-              <Inp label="Discount (Flat)" type="number" value={discount.toString()} onChange={(v: string) => setDiscount(parseFloat(v) || 0)} />
-              <div className="pt-4 border-t space-y-4">
-                 <Inp label="Advance Received" type="number" value={advanceAmount.toString()} onChange={(v: string) => setAdvanceAmount(parseFloat(v) || 0)} />
-                 <div className="space-y-1">
-                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Mode</label>
-                   <select className="w-full border-2 p-3 rounded-2xl text-[12px] font-black bg-white outline-none" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
-                     <option value="Cash">Cash Account</option>
-                     <option value="UPI">UPI / QR Scan</option>
-                     <option value="Card">Credit/Debit Card</option>
-                     <option value="Bank">Bank Transfer</option>
-                   </select>
-                 </div>
+              <Inp label="Base Rent" type="number" value={roomTariff.toString()} onChange={(v: string) => setRoomTariff(parseFloat(v) || 0)} />
+              <Inp label="Advance Paid" type="number" value={advanceAmount.toString()} onChange={(v: string) => setAdvanceAmount(parseFloat(v) || 0)} />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Type</label>
+                <select className="w-full border-2 p-3 rounded-2xl text-[12px] font-black bg-white outline-none" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
+                   <option value="Cash">Cash Account</option>
+                   <option value="UPI">Digital (UPI)</option>
+                   <option value="Card">Bank Card</option>
+                </select>
               </div>
             </div>
             <div className="pt-6 space-y-3">
-              <button onClick={handleSave} className="w-full bg-[#003d80] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-2xl hover:bg-black transition-all">Establish Check-in</button>
-              <button onClick={() => setShowGRCPreview(true)} className="w-full bg-blue-100 text-blue-900 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-blue-200 transition-all">Preview GRC Form</button>
-              <button onClick={onClose} className="w-full py-2 text-slate-400 font-black uppercase text-[9px] hover:text-red-500 transition-colors">Discard Draft</button>
+              <button onClick={handleSave} className="w-full bg-[#003d80] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-2xl hover:bg-black transition-all">Authorize Check-in</button>
+              <button onClick={() => setShowGRCPreview(true)} className="w-full bg-blue-100 text-blue-900 py-4 rounded-2xl font-black uppercase text-[10px] hover:bg-blue-200 transition-all">Preview Form-C</button>
+              <button onClick={onClose} className="w-full py-2 text-slate-400 font-black uppercase text-[9px] hover:text-red-500 transition-colors">Cancel Desk</button>
             </div>
           </div>
         </div>
@@ -319,7 +323,7 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
         {showGRCPreview && (
           <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col no-print-backdrop">
              <div className="bg-black p-4 flex justify-between items-center no-print">
-                <p className="text-white font-black uppercase text-xs">GRC Document Preview</p>
+                <p className="text-white font-black uppercase text-xs">Form-C Official Preview</p>
                 <button onClick={() => setShowGRCPreview(false)} className="text-white font-black uppercase text-xs">Close [X]</button>
              </div>
              <div className="flex-1 overflow-y-auto bg-gray-500/20 p-8 custom-scrollbar">
@@ -334,7 +338,7 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
 };
 
 const Inp = ({ label, value, onChange, type = "text" }: any) => (
-  <div className="space-y-1 w-full">
+  <div className="space-y-1 w-full text-left">
     <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">{label}</label>
     <input type={type} className="w-full border-2 p-3 rounded-2xl font-black text-[12px] bg-slate-50 outline-none focus:border-blue-500 transition-all text-black" value={value || ''} onChange={e => onChange(e.target.value)} />
   </div>
@@ -346,7 +350,7 @@ const DocBox = ({ label, src, onChange, onCapture }: any) => (
       <img src={src} className="w-full h-full object-cover" />
     ) : (
       <div className="text-center p-2">
-        <svg className="w-6 h-6 text-slate-200 mx-auto mb-1 group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        <svg className="w-6 h-6 text-slate-200 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center block">{label}</span>
       </div>
     )}
@@ -355,7 +359,7 @@ const DocBox = ({ label, src, onChange, onCapture }: any) => (
           <span className="text-[8px] font-black uppercase">Upload</span>
           <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={onChange} />
        </div>
-       <button type="button" onClick={onCapture} className="bg-blue-600 text-white p-2 rounded-lg text-[8px] font-black uppercase">Capture</button>
+       <button type="button" onClick={onCapture} className="bg-blue-600 text-white p-2 rounded-lg text-[8px] font-black uppercase">Snap</button>
     </div>
   </div>
 );

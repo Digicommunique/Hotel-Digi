@@ -18,6 +18,16 @@ export interface User {
   password?: string;
 }
 
+export interface Supervisor {
+  id: string;
+  name: string;
+  loginId: string;
+  password?: string;
+  assignedRoomIds: string[];
+  status: 'ACTIVE' | 'INACTIVE';
+  lastActive?: string;
+}
+
 export enum RoomType {
   DELUXE = 'DELUXE ROOM',
   BUDGET = 'BUDGET ROOM',
@@ -33,7 +43,7 @@ export interface RoomInventoryItem {
 
 export interface Guest {
   id: string;
-  name: string; // Display name
+  name: string; 
   surName?: string;
   givenName?: string;
   gender?: 'Male' | 'Female' | 'Other';
@@ -45,6 +55,7 @@ export interface Guest {
   state: string;
   country?: string;
   nationality: string;
+  idType: 'Aadhar' | 'Passport' | 'PAN' | 'VoterId' | 'License' | 'Other';
   idNumber: string;
   adults: number;
   children: number;
@@ -52,7 +63,6 @@ export interface Guest {
   others: number;
   gstin?: string;
   
-  // International / GRC Specific
   passportNo?: string;
   passportPlaceOfIssue?: string;
   passportDateOfIssue?: string;
@@ -121,11 +131,8 @@ export interface Payment {
 }
 
 export type TransactionType = 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'DEBIT_NOTE' | 'CREDIT_NOTE' | 'REFUND';
-
-/* ADD: AccountGroupName definition used in Accounting.tsx */
 export type AccountGroupName = 'Capital' | 'Fixed Asset' | 'Current Asset' | 'Direct Expense' | 'Indirect Expense' | 'Direct Income' | 'Indirect Income' | 'Current Liability' | 'Operating';
 
-/* ADD: Transaction interface used for accounting and billing */
 export interface Transaction {
   id: string;
   date: string;
@@ -138,7 +145,6 @@ export interface Transaction {
   referenceId?: string;
 }
 
-/* ADD: RoomShiftLog interface for tracking room movements */
 export interface RoomShiftLog {
   id: string;
   bookingId: string;
@@ -149,7 +155,6 @@ export interface RoomShiftLog {
   reason: string;
 }
 
-/* ADD: CleaningLog interface for housekeeping tracking */
 export interface CleaningLog {
   id: string;
   roomId: string;
@@ -157,7 +162,6 @@ export interface CleaningLog {
   staffName?: string;
 }
 
-/* ADD: Quotation interface for sales and estimates */
 export interface Quotation {
   id: string;
   date: string;

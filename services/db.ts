@@ -1,6 +1,6 @@
 
 import { Dexie, type Table } from 'dexie';
-import { Room, Guest, Booking, Transaction, RoomShiftLog, CleaningLog, Quotation, HostelSettings, GroupProfile } from '../types';
+import { Room, Guest, Booking, Transaction, RoomShiftLog, CleaningLog, Quotation, HostelSettings, GroupProfile, Supervisor } from '../types';
 
 export class HotelSphereDB extends Dexie {
   rooms!: Table<Room>;
@@ -12,12 +12,11 @@ export class HotelSphereDB extends Dexie {
   quotations!: Table<Quotation>;
   settings!: Table<HostelSettings & { id: string }>;
   groups!: Table<GroupProfile>;
+  supervisors!: Table<Supervisor>;
 
   constructor() {
     super('HotelSphereDB');
-    // Ensure Dexie versioning is configured on the instance
-    // FIX: Using 'any' cast to bypass false-positive "Property 'version' does not exist" error
-    (this as any).version(2).stores({
+    (this as any).version(3).stores({
       rooms: 'id, number, status, type',
       guests: 'id, name, phone, email',
       bookings: 'id, bookingNo, roomId, guestId, status, checkInDate, checkOutDate, groupBookingId, groupId',
@@ -26,7 +25,8 @@ export class HotelSphereDB extends Dexie {
       cleaningLogs: 'id, date, roomId',
       quotations: 'id, date, guestName',
       settings: 'id',
-      groups: 'id, groupName, headName, status'
+      groups: 'id, groupName, headName, status',
+      supervisors: 'id, loginId, name, status'
     });
   }
 }
@@ -43,7 +43,8 @@ export async function exportDatabase() {
     cleaningLogs: await db.cleaningLogs.toArray(),
     quotations: await db.quotations.toArray(),
     settings: await db.settings.toArray(),
-    groups: await db.groups.toArray()
+    groups: await db.groups.toArray(),
+    supervisors: await db.supervisors.toArray()
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -59,9 +60,7 @@ export async function importDatabase(jsonFile: File) {
     reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        // Correct usage of instance-level transaction management
-        // FIX: Using 'any' cast to resolve "Property 'transaction' does not exist" error and avoid confusion with 'transactions' table property
-        await (db as any).transaction('rw', [db.rooms, db.guests, db.bookings, db.transactions, db.shiftLogs, db.cleaningLogs, db.quotations, db.settings, db.groups], async () => {
+        await (db as any).transaction('rw', [db.rooms, db.guests, db.bookings, db.transactions, db.shiftLogs, db.cleaningLogs, db.quotations, db.settings, db.groups, db.supervisors], async () => {
           if (data.rooms) { await db.rooms.clear(); await db.rooms.bulkAdd(data.rooms); }
           if (data.guests) { await db.guests.clear(); await db.guests.bulkAdd(data.guests); }
           if (data.bookings) { await db.bookings.clear(); await db.bookings.bulkAdd(data.bookings); }
@@ -71,6 +70,7 @@ export async function importDatabase(jsonFile: File) {
           if (data.quotations) { await db.quotations.clear(); await db.quotations.bulkAdd(data.quotations); }
           if (data.settings) { await db.settings.clear(); await db.settings.bulkAdd(data.settings); }
           if (data.groups) { await db.groups.clear(); await db.groups.bulkAdd(data.groups); }
+          if (data.supervisors) { await db.supervisors.clear(); await db.supervisors.bulkAdd(data.supervisors); }
         });
         resolve(true);
       } catch (err) {

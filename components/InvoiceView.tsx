@@ -4,39 +4,53 @@ import { Guest, Booking, Room, HostelSettings, Payment } from '../types';
 
 interface InvoiceViewProps {
   guest: Guest;
-  booking: Booking;
-  room: Room;
+  booking?: Booking; // Single booking for split billing
+  groupBookings?: (Booking & { roomNumber: string, roomType: string })[]; // Multiple bookings for consolidated billing
+  room?: Room;
   settings: HostelSettings;
   payments: Payment[];
 }
 
-const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, room, settings, payments }) => {
+const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings, room, settings, payments }) => {
   const taxRate = settings.taxRate || 12;
-  const subTotal = booking.basePrice - (booking.discount || 0);
+
+  // Calculate totals based on whether it's single or consolidated
+  const renderBookings = groupBookings || (booking ? [{ ...booking, roomNumber: room?.number || '?', roomType: room?.type || '?' }] : []);
+
+  let totalRoomRent = 0;
+  let totalServiceCharges = 0;
+  let totalDiscount = 0;
+  let nightsTotal = 0;
+
+  const lineItems = renderBookings.map(b => {
+    const start = new Date(b.checkInDate);
+    const end = new Date(b.checkOutDate);
+    const nights = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)));
+    const rent = (b.basePrice || 0) * nights;
+    const services = (b.charges || []).reduce((acc, c) => acc + c.amount, 0);
+    
+    totalRoomRent += rent;
+    totalServiceCharges += services;
+    totalDiscount += (b.discount || 0);
+    nightsTotal += nights;
+
+    return {
+      ...b,
+      nights,
+      rent,
+      services
+    };
+  });
+
+  const subTotal = totalRoomRent + totalServiceCharges - totalDiscount;
   const taxAmount = (subTotal * taxRate) / 100;
   const netTotal = subTotal + taxAmount;
-  
   const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
   const balance = netTotal - totalPaid;
 
-  const start = new Date(booking.checkInDate);
-  const end = new Date(booking.checkOutDate);
-  const nights = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)));
-
-  const totalPax = (booking.adults || 0) + (booking.children || 0) + (booking.kids || 0) + (booking.others || 0);
-  const paxBreakdown = [];
-  if (booking.adults) paxBreakdown.push(`${booking.adults}A`);
-  if (booking.children) paxBreakdown.push(`${booking.children}C`);
-  if (booking.kids) paxBreakdown.push(`${booking.kids}K`);
-  if (booking.others) paxBreakdown.push(`${booking.others}E`);
-
   // UPI QR Construction
-  const upiUrl = `upi://pay?pa=${settings.upiId || ''}&pn=${encodeURIComponent(settings.name)}&am=${balance.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + booking.bookingNo)}`;
+  const upiUrl = `upi://pay?pa=${settings.upiId || ''}&pn=${encodeURIComponent(settings.name)}&am=${balance.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + (booking?.bookingNo || 'GRP-INV'))}`;
   const upiQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(upiUrl)}`;
-
-  // Bill Summary QR
-  const billSummary = `PROPERTY: ${settings.name}\nINV: ${booking.bookingNo}\nGuest: ${guest.name}\nUnit: ${room.number}\nTotal: ₹${netTotal.toFixed(2)}\nBalance: ₹${balance.toFixed(2)}`;
-  const billQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(billSummary)}`;
 
   return (
     <div className="bg-white p-10 w-[210mm] min-h-[297mm] mx-auto text-[11px] text-gray-800 font-sans leading-tight border border-gray-200 shadow-2xl print:border-none print:shadow-none print:m-0 print:p-6 invoice-sheet">
@@ -66,81 +80,54 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, room, setting
         
         <div className="text-right flex flex-col justify-between h-24">
           <div className="bg-blue-900 text-white px-6 py-2 rounded-xl inline-block shadow-lg">
-             <p className="text-[10px] font-black uppercase tracking-widest">Tax Invoice</p>
+             <p className="text-[10px] font-black uppercase tracking-widest">{groupBookings ? 'Consolidated Invoice' : 'Tax Invoice'}</p>
           </div>
           <div className="space-y-0.5">
-             <p className="text-[9px] font-black text-gray-400 uppercase">Invoice Number</p>
-             <p className="text-lg font-black text-blue-900 uppercase tracking-tight">{booking.bookingNo}</p>
+             <p className="text-[9px] font-black text-gray-400 uppercase">Invoice Reference</p>
+             <p className="text-lg font-black text-blue-900 uppercase tracking-tight">{booking?.bookingNo || 'GROUP-MASTER'}</p>
           </div>
         </div>
       </div>
 
-      {/* Guest & Stay Details Grid */}
-      <div className="grid grid-cols-2 gap-px bg-gray-200 border border-gray-200 rounded-2xl overflow-hidden mb-8 shadow-sm">
-        <div className="bg-white p-5 space-y-3">
-          <InfoItem label="Guest Details" value={guest.name} subValue={`${guest.phone} | ${guest.email}`} isPrimary />
-          <InfoItem label="Permanent Address" value={guest.address} />
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
-             <InfoItem label="Nationality" value={guest.nationality} />
-             <InfoItem label="State" value={guest.state} />
-          </div>
+      {/* Guest Details */}
+      <div className="bg-gray-50 border p-5 rounded-2xl mb-8 flex justify-between shadow-sm">
+        <div className="space-y-3">
+          <InfoItem label="Guest / Billing Entity" value={guest.name} subValue={`${guest.phone} | ${guest.email}`} isPrimary />
+          <InfoItem label="Address" value={guest.address} />
         </div>
-        <div className="bg-white p-5 space-y-3">
-          <div className="grid grid-cols-2 gap-4">
-             <InfoItem label="Stay Period" value={`${nights} Night(s)`} />
-             <InfoItem label="Unit Number" value={`Room ${room.number}`} subValue={room.type} isPrimary />
-          </div>
-          <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-2">
-             <InfoItem label="Arrival" value={booking.checkInDate} subValue={booking.checkInTime} />
-             <InfoItem label="Departure" value={booking.checkOutDate} subValue={booking.checkOutTime} />
-          </div>
-          <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-2">
-             <InfoItem label="Occupancy" value={`${totalPax} Person(s)`} subValue={paxBreakdown.join(', ')} />
-             <InfoItem label="Meal Plan" value={booking.mealPlan || 'EP'} />
-          </div>
+        <div className="text-right space-y-3">
+          <InfoItem label="Date of Issue" value={new Date().toLocaleDateString('en-GB')} />
+          {groupBookings && <InfoItem label="Total Rooms" value={`${groupBookings.length} Units`} />}
         </div>
       </div>
 
-      {/* Charge Ledger */}
+      {/* Itemized Table */}
       <div className="border border-gray-200 rounded-2xl overflow-hidden mb-8 shadow-sm">
         <table className="w-full text-left border-collapse">
           <thead className="bg-blue-50/50 border-b border-gray-200 font-black uppercase text-blue-900 text-[9px]">
             <tr>
-              <th className="p-4 w-12 text-center">#</th>
-              <th className="p-4">Description of Service</th>
-              <th className="p-4 text-right">Qty</th>
-              <th className="p-4 text-right">Rate</th>
-              <th className="p-4 text-right">Taxable Value</th>
+              <th className="p-4">Stay Description</th>
+              <th className="p-4 text-center">Nights</th>
+              <th className="p-4 text-right">Tariff (₹)</th>
+              <th className="p-4 text-right">Rent Total (₹)</th>
+              <th className="p-4 text-right">Services (₹)</th>
+              <th className="p-4 text-right">Net Value (₹)</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 font-bold">
-            <tr className="bg-white">
-              <td className="p-4 text-center text-gray-400">01</td>
-              <td className="p-4">
-                 <p className="uppercase text-blue-900">Room Tariff - {room.type}</p>
-                 <p className="text-[8px] text-gray-400 font-medium">Standard stay allocation for the period specified above</p>
-              </td>
-              <td className="p-4 text-right">{nights}</td>
-              <td className="p-4 text-right">₹{(booking.basePrice / nights).toFixed(2)}</td>
-              <td className="p-4 text-right">₹{booking.basePrice.toFixed(2)}</td>
-            </tr>
-            {booking.charges.map((c, i) => (
-              <tr key={c.id} className="bg-white">
-                <td className="p-4 text-center text-gray-400">{String(i + 2).padStart(2, '0')}</td>
-                <td className="p-4 uppercase">{c.description}</td>
-                <td className="p-4 text-right">1</td>
-                <td className="p-4 text-right">₹{c.amount.toFixed(2)}</td>
-                <td className="p-4 text-right">₹{c.amount.toFixed(2)}</td>
+          <tbody className="divide-y divide-gray-100 font-bold uppercase">
+            {lineItems.map((item, idx) => (
+              <tr key={idx} className="bg-white">
+                <td className="p-4">
+                   <p className="text-blue-900">Room {item.roomNumber} - {item.roomType}</p>
+                   <p className="text-[8px] text-gray-400">{item.checkInDate} to {item.checkOutDate}</p>
+                </td>
+                <td className="p-4 text-center">{item.nights}</td>
+                <td className="p-4 text-right">₹{item.basePrice.toFixed(2)}</td>
+                <td className="p-4 text-right">₹{item.rent.toFixed(2)}</td>
+                <td className="p-4 text-right">₹{item.services.toFixed(2)}</td>
+                <td className="p-4 text-right">₹{(item.rent + item.services - (item.discount || 0)).toFixed(2)}</td>
               </tr>
             ))}
-            {booking.discount > 0 && (
-              <tr className="bg-red-50/20 text-red-600 italic">
-                <td className="p-4"></td>
-                <td className="p-4">LESS: APPLIED DISCOUNT / OFFER</td>
-                <td colSpan={2}></td>
-                <td className="p-4 text-right">-₹{booking.discount.toFixed(2)}</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -149,12 +136,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, room, setting
       <div className="grid grid-cols-2 gap-10 mb-8">
         <div className="space-y-4">
            <div className="bg-gray-50 border p-4 rounded-2xl">
-              <p className="text-[9px] font-black uppercase text-gray-400 mb-2 border-b pb-2">Settlement Summary</p>
+              <p className="text-[9px] font-black uppercase text-gray-400 mb-2 border-b pb-2">Payment Receipts</p>
               <table className="w-full text-[9px] font-bold">
                  <tbody>
                     {payments.map(p => (
                        <tr key={p.id} className="border-b border-gray-100 last:border-0 h-8">
-                          <td className="text-gray-500 uppercase">{p.method}</td>
+                          <td className="text-gray-500 uppercase">{p.method} ({p.date.split('T')[0]})</td>
                           <td className="text-right text-green-700">₹{p.amount.toFixed(2)}</td>
                        </tr>
                     ))}
@@ -166,7 +153,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, room, setting
         
         <div className="bg-blue-900 rounded-[2rem] p-8 text-white space-y-4 shadow-xl">
            <div className="flex justify-between items-center text-xs opacity-70 font-black uppercase">
-              <span>Taxable Subtotal</span>
+              <span>Gross Subtotal</span>
               <span>₹{subTotal.toFixed(2)}</span>
            </div>
            <div className="flex justify-between items-center text-xs opacity-70 font-black uppercase">
@@ -176,7 +163,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, room, setting
            <div className="h-px bg-white/20 my-2"></div>
            <div className="flex justify-between items-end">
               <div>
-                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Total Bill Value</p>
+                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Total Bill Amount</p>
                  <p className="text-3xl font-black tracking-tighter">₹{netTotal.toFixed(2)}</p>
               </div>
               <div className="text-right">
@@ -187,59 +174,36 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, room, setting
         </div>
       </div>
 
-      {/* Interactive QR Settlement Area */}
+      {/* Bottom QRs */}
       <div className="grid grid-cols-2 gap-6 p-6 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 mb-10 no-print">
         <div className="flex items-center gap-6">
            <div className="w-24 h-24 bg-white p-2 rounded-2xl shadow-md border flex items-center justify-center">
               <img src={upiQrSrc} className="w-full h-full" alt="Pay QR" />
            </div>
            <div className="space-y-1">
-              <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest leading-none">Instant UPI Payment</p>
-              <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">Scan to pay outstanding balance<br/>UPI: {settings.upiId || 'Not Configured'}</p>
+              <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest leading-none">Scan to Pay (UPI)</p>
+              <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">UPI ID: {settings.upiId || 'N/A'}</p>
            </div>
         </div>
-        <div className="flex items-center gap-6">
-           <div className="w-24 h-24 bg-white p-2 rounded-2xl shadow-md border flex items-center justify-center">
-              <img src={billQrSrc} className="w-full h-full" alt="Bill QR" />
-           </div>
-           <div className="space-y-1">
-              <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest leading-none">Digital Invoice Copy</p>
-              <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">Scan to verify bill records or<br/>download digital PDF copy</p>
-           </div>
+        <div className="text-right flex flex-col justify-center pr-4">
+           <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Authorized Invoicing</p>
+           <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">This is a computer generated document.</p>
         </div>
       </div>
 
-      {/* Signature & Authentication */}
-      <div className="grid grid-cols-3 gap-12 text-center pt-12">
+      {/* Signature Area */}
+      <div className="grid grid-cols-2 gap-32 text-center pt-12">
         <div className="space-y-4">
            <div className="h-16 flex items-end justify-center border-b border-gray-200"></div>
            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Guest Signature</p>
         </div>
         <div className="space-y-4">
-           <div className="h-16 flex items-end justify-center border-b border-gray-200 overflow-hidden">
-              {settings.signature ? (
-                <img src={settings.signature} className="h-full object-contain mix-blend-multiply" alt="Signature" />
-              ) : null}
+           <div className="h-16 flex items-end justify-center border-b border-gray-200">
+              {settings.signature && <img src={settings.signature} className="h-full object-contain mix-blend-multiply" />}
            </div>
-           <p className="text-[9px] font-black uppercase text-blue-900 tracking-widest">Authorized Signatory</p>
-        </div>
-        <div className="space-y-4">
-           <div className="h-16 flex items-end justify-center border-b border-gray-200"></div>
-           <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">For {settings.name}</p>
+           <p className="text-[9px] font-black uppercase text-blue-900 tracking-widest">Property Manager</p>
         </div>
       </div>
-
-      <div className="mt-12 text-center space-y-2">
-         <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em]">Thank You for choosing {settings.name}</p>
-         <div className="flex justify-center gap-4 text-[7px] font-bold text-gray-300 uppercase">
-            <span>Corporate Bill</span>
-            <span>•</span>
-            <span>Property Registry Copy</span>
-            <span>•</span>
-            <span>Digital Original</span>
-         </div>
-      </div>
-
     </div>
   );
 };
