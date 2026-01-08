@@ -18,7 +18,13 @@ export async function pushToCloud(tableName: string, data: any) {
       .upsert(data, { onConflict: 'id' });
     
     if (error) {
-      console.error(`Supabase Sync Error [${tableName}]:`, error.message);
+      const isSchemaError = error.message.includes('column') || error.message.includes('schema cache');
+      if (isSchemaError) {
+        console.error(`Supabase Schema Mismatch [${tableName}]: The cloud database is missing required columns. 
+        FIX: Go to Settings > Cloud Sync and copy the SQL migration script to your Supabase SQL Editor.`);
+      } else {
+        console.error(`Supabase Sync Error [${tableName}]:`, error.message);
+      }
       return false;
     }
     return true;

@@ -9,7 +9,7 @@ export enum RoomStatus {
   STAFF_BLOCK = 'STAFF_BLOCK'
 }
 
-export type UserRole = 'ADMIN' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SUPERVISOR';
+export type UserRole = 'SUPERADMIN' | 'ADMIN' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SUPERVISOR';
 
 export interface User {
   id: string;
@@ -33,16 +33,49 @@ export interface RoomInventoryItem {
 
 export interface Guest {
   id: string;
-  name: string;
+  name: string; // Display name
+  surName?: string;
+  givenName?: string;
+  gender?: 'Male' | 'Female' | 'Other';
+  dob?: string;
   phone: string;
   email: string;
   address: string;
   city: string;
   state: string;
+  country?: string;
   nationality: string;
+  idNumber: string;
+  adults: number;
+  children: number;
+  kids: number;
+  others: number;
   gstin?: string;
+  
+  // International / GRC Specific
   passportNo?: string;
+  passportPlaceOfIssue?: string;
+  passportDateOfIssue?: string;
+  passportDateOfExpiry?: string;
   visaNo?: string;
+  visaType?: string;
+  visaPlaceOfIssue?: string;
+  visaDateOfIssue?: string;
+  visaDateOfExpiry?: string;
+  embassyCountry?: string;
+  arrivalFrom?: string;
+  nextDestination?: string;
+  arrivalInIndiaDate?: string;
+  stayDurationIndia?: string;
+  purposeOfVisit?: string;
+  employedInIndia?: boolean;
+  contactInIndia?: string;
+  cellInIndia?: string;
+  residingCountryContact?: string;
+  addressInIndia?: string;
+  applicationId?: string;
+  remarks?: string;
+
   documents: {
     aadharFront?: string;
     aadharBack?: string;
@@ -89,17 +122,10 @@ export interface Payment {
 
 export type TransactionType = 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'DEBIT_NOTE' | 'CREDIT_NOTE' | 'REFUND';
 
-export type AccountGroupName = 
-  | 'Capital' 
-  | 'Fixed Asset' 
-  | 'Current Asset' 
-  | 'Direct Expense' 
-  | 'Indirect Expense' 
-  | 'Direct Income' 
-  | 'Indirect Income' 
-  | 'Current Liability' 
-  | 'Operating';
+/* ADD: AccountGroupName definition used in Accounting.tsx */
+export type AccountGroupName = 'Capital' | 'Fixed Asset' | 'Current Asset' | 'Direct Expense' | 'Indirect Expense' | 'Direct Income' | 'Indirect Income' | 'Current Liability' | 'Operating';
 
+/* ADD: Transaction interface used for accounting and billing */
 export interface Transaction {
   id: string;
   date: string;
@@ -107,11 +133,12 @@ export interface Transaction {
   accountGroup: AccountGroupName;
   ledger: string;
   amount: number;
+  entityName?: string;
   description: string;
   referenceId?: string;
-  entityName?: string;
 }
 
+/* ADD: RoomShiftLog interface for tracking room movements */
 export interface RoomShiftLog {
   id: string;
   bookingId: string;
@@ -122,22 +149,21 @@ export interface RoomShiftLog {
   reason: string;
 }
 
+/* ADD: CleaningLog interface for housekeeping tracking */
 export interface CleaningLog {
   id: string;
   roomId: string;
-  staffName: string;
   date: string;
-  status: 'CLEANED' | 'IN_PROGRESS';
+  staffName?: string;
 }
 
+/* ADD: Quotation interface for sales and estimates */
 export interface Quotation {
   id: string;
   date: string;
   guestName: string;
-  validUntil: string;
-  items: { description: string; price: number; qty: number }[];
-  total: number;
-  status: 'SUBMITTED' | 'ACCEPTED' | 'REJECTED';
+  amount: number;
+  remarks?: string;
 }
 
 export interface Booking {
@@ -155,18 +181,22 @@ export interface Booking {
   payments: Payment[];
   basePrice: number;
   discount: number;
-  paxCount?: number;
-  placeOfSupply?: string;
+  adults?: number;
+  children?: number;
+  kids?: number;
+  others?: number;
   mealPlan?: string;
-  discountPercent?: number;
-  company?: string;
-  bizSource?: string;
   agent?: string;
-  remarks?: string;
   purpose?: string;
-  groupBookingId?: string;
-  isComplementary?: boolean;
-  agentCommission?: number;
+  company?: string;
+  secondaryGuest?: {
+    name: string;
+    gender: 'Male' | 'Female' | 'Other';
+    documents: {
+      aadharFront?: string;
+      aadharBack?: string;
+    };
+  };
 }
 
 export interface Room {
@@ -177,7 +207,6 @@ export interface Room {
   price: number;
   status: RoomStatus;
   currentBookingId?: string;
-  inventory?: RoomInventoryItem[];
 }
 
 export interface AgentConfig {
@@ -188,8 +217,6 @@ export interface AgentConfig {
 export interface HostelSettings {
   name: string;
   address: string;
-  logo?: string;
-  signature?: string;
   agents: AgentConfig[];
   roomTypes: string[];
   gstNumber?: string;
@@ -200,4 +227,6 @@ export interface HostelSettings {
   receptionistPassword?: string;
   accountantPassword?: string;
   supervisorPassword?: string;
+  logo?: string;
+  signature?: string;
 }

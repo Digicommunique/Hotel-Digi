@@ -18,11 +18,13 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
   const [amount, setAmount] = useState('');
   const [ledger, setLedger] = useState('Cash Account');
   const [group, setGroup] = useState<AccountGroupName>('Operating');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [desc, setDesc] = useState('');
   const [targetGuest, setTargetGuest] = useState('');
   const [selectedLedger, setSelectedLedger] = useState('Cash Account');
   
-  const [selectedReceipt, setSelectedReceipt] = useState<Transaction | null>(null);
+  const [reportStart, setReportStart] = useState(new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split('T')[0]);
+  const [reportEnd, setReportEnd] = useState(new Date().toISOString().split('T')[0]);
 
   const ACCOUNT_GROUPS: AccountGroupName[] = [
     'Capital', 'Fixed Asset', 'Current Asset', 'Direct Expense', 'Indirect Expense', 
@@ -35,7 +37,7 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
     if (!amount || !ledger) return alert("Please fill Amount and Ledger.");
     const newTx: Transaction = {
       id: Math.random().toString(36).substr(2, 9),
-      date: new Date().toISOString().split('T')[0],
+      date,
       type, 
       amount: parseFloat(amount) || 0, 
       ledger, 
@@ -45,23 +47,25 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
     };
     setTransactions([...transactions, newTx]);
     setAmount(''); setDesc(''); setTargetGuest('');
-    alert(`Entry posted successfully.`);
+    alert(`Financial entry posted for ${date}`);
   };
 
   const calculatePL = useMemo(() => {
-    const income = transactions.filter(t => t.accountGroup.includes('Income')).reduce((s,t) => s + t.amount, 0);
-    const expense = transactions.filter(t => t.accountGroup.includes('Expense')).reduce((s,t) => s + t.amount, 0);
+    const filtered = transactions.filter(t => t.date >= reportStart && t.date <= reportEnd);
+    const income = filtered.filter(t => t.accountGroup.includes('Income')).reduce((s,t) => s + t.amount, 0);
+    const expense = filtered.filter(t => t.accountGroup.includes('Expense')).reduce((s,t) => s + t.amount, 0);
     return { income, expense, profit: income - expense };
-  }, [transactions]);
+  }, [transactions, reportStart, reportEnd]);
 
   const calculateBS = useMemo(() => {
-    const assets = transactions.filter(t => t.accountGroup.includes('Asset')).reduce((s,t) => s + (t.type === 'RECEIPT' ? t.amount : -t.amount), 0);
-    const liabilities = transactions.filter(t => t.accountGroup === 'Capital' || t.accountGroup === 'Current Liability').reduce((s,t) => s + t.amount, 0);
+    const filtered = transactions.filter(t => t.date <= reportEnd);
+    const assets = filtered.filter(t => t.accountGroup.includes('Asset')).reduce((s,t) => s + (t.type === 'RECEIPT' ? t.amount : -t.amount), 0);
+    const liabilities = filtered.filter(t => t.accountGroup === 'Capital' || t.accountGroup === 'Current Liability').reduce((s,t) => s + t.amount, 0);
     return { assets, liabilities };
-  }, [transactions]);
+  }, [transactions, reportEnd]);
 
-  const ledgerTransactions = useMemo(() => transactions.filter(t => t.ledger === selectedLedger), [transactions, selectedLedger]);
-  const cashbookTransactions = useMemo(() => transactions.filter(t => t.ledger.toLowerCase().includes('cash')), [transactions]);
+  const ledgerTransactions = useMemo(() => transactions.filter(t => t.ledger === selectedLedger && t.date >= reportStart && t.date <= reportEnd), [transactions, selectedLedger, reportStart, reportEnd]);
+  const cashbookTransactions = useMemo(() => transactions.filter(t => t.ledger.toLowerCase().includes('cash') && t.date >= reportStart && t.date <= reportEnd), [transactions, reportStart, reportEnd]);
 
   const downloadCSV = (filename: string, content: string) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -75,34 +79,58 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
     document.body.removeChild(link);
   };
 
-  const handleDownloadLedger = () => {
-    const headers = "Date,Description,Entity,Debit,Credit\n";
-    const rows = ledgerTransactions.map(t => 
-      `${t.date},${t.description.replace(/,/g, ' ')},${t.entityName || ''},${t.type === 'PAYMENT' ? t.amount : 0},${t.type === 'RECEIPT' ? t.amount : 0}`
-    ).join('\n');
-    downloadCSV(`Ledger_${selectedLedger}_${new Date().toISOString().split('T')[0]}.csv`, headers + rows);
-  };
+  const handleExportCSV = () => {
+    let filename = `Accounting_${activeTab}_${reportStart}_to_${reportEnd}.csv`;
+    let content = "";
+    
+    if (activeTab === 'LEDGER') {
+      content = "Date,Registry Narrative,Debit Out,Credit In\n";
+      ledgerTransactions.forEach(t => {
+        content += `${t.date},"${t.description} ${t.entityName ? '['+t.entityName+']' : ''}",${t.type === 'PAYMENT' ? t.amount : 0},${t.type === 'RECEIPT' ? t.amount : 0}\n`;
+      });
+    } else if (activeTab === 'CASHBOOK') {
+      content = "Date,Daily Narrative,Cash Inflow,Cash Outflow\n";
+      cashbookTransactions.forEach(t => {
+        content += `${t.date},"${t.description}",${t.type === 'RECEIPT' ? t.amount : 0},${t.type === 'PAYMENT' ? t.amount : 0}\n`;
+      });
+    } else if (activeTab === 'PL') {
+      content = "Type,Ledger,Date,Amount\n";
+      content += "REVENUE\n";
+      transactions.filter(t => t.date >= reportStart && t.date <= reportEnd && t.accountGroup.includes('Income')).forEach(t => {
+        content += `Income,"${t.ledger}",${t.date},${t.amount}\n`;
+      });
+      content += `TOTAL REVENUE,,,${calculatePL.income}\n\nEXPENDITURE\n`;
+      transactions.filter(t => t.date >= reportStart && t.date <= reportEnd && t.accountGroup.includes('Expense')).forEach(t => {
+        content += `Expense,"${t.ledger}",${t.date},${t.amount}\n`;
+      });
+      content += `TOTAL EXPENDITURE,,,${calculatePL.expense}\n`;
+      content += `NET ${calculatePL.profit >= 0 ? 'SURPLUS' : 'DEFICIT'},,,${Math.abs(calculatePL.profit)}\n`;
+    } else if (activeTab === 'BS') {
+      content = "Classification,Ledger,Amount\nLIABILITIES\n";
+      transactions.filter(t => t.date <= reportEnd && (t.accountGroup === 'Capital' || t.accountGroup === 'Current Liability')).forEach(t => {
+        content += `Liability,"${t.ledger}",${t.amount}\n`;
+      });
+      content += `TOTAL LIABILITIES,,${calculateBS.liabilities}\n\nASSETS\n`;
+      transactions.filter(t => t.date <= reportEnd && t.accountGroup.includes('Asset')).forEach(t => {
+        content += `Asset,"${t.ledger}",${t.amount}\n`;
+      });
+      content += `TOTAL ASSETS,,${calculateBS.assets}\n`;
+    }
 
-  const handleDownloadCashbook = () => {
-    const headers = "Date,Description,In,Out\n";
-    const rows = cashbookTransactions.map(t => 
-      `${t.date},${t.description.replace(/,/g, ' ')},${t.type === 'RECEIPT' ? t.amount : 0},${t.type === 'PAYMENT' ? t.amount : 0}`
-    ).join('\n');
-    downloadCSV(`Cashbook_${new Date().toISOString().split('T')[0]}.csv`, headers + rows);
+    downloadCSV(filename, content);
   };
 
   const handleWhatsAppCashbook = () => {
-    const today = new Date().toISOString().split('T')[0];
     const ins = cashbookTransactions.filter(t => t.type === 'RECEIPT').reduce((s,t)=>s+t.amount,0);
     const outs = cashbookTransactions.filter(t => t.type === 'PAYMENT').reduce((s,t)=>s+t.amount,0);
-    const message = `Cashbook Registry Summary - ${today}\nTotal In: ₹${ins.toFixed(2)}\nTotal Out: ₹${outs.toFixed(2)}\nNet: ₹${(ins-outs).toFixed(2)}`;
+    const message = `*Cashbook Registry Summary*\nPeriod: ${reportStart} to ${reportEnd}\nTotal In: ₹${ins.toFixed(2)}\nTotal Out: ₹${outs.toFixed(2)}\nNet: ₹${(ins-outs).toFixed(2)}`;
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
   return (
-    <div className="p-6 bg-[#f8fafc] h-full flex flex-col gap-6 text-black">
-      <div className="flex gap-4 border-b pb-4 overflow-x-auto no-print scrollbar-hide">
+    <div className="p-8 bg-[#f8fafc] h-full flex flex-col gap-8 text-black">
+      <div className="flex gap-2 overflow-x-auto no-print scrollbar-hide pb-2">
         <Tab active={activeTab === 'ENTRY'} onClick={() => setActiveTab('ENTRY')}>New Voucher</Tab>
         <Tab active={activeTab === 'LEDGER'} onClick={() => setActiveTab('LEDGER')}>Ledger Register</Tab>
         <Tab active={activeTab === 'CASHBOOK'} onClick={() => setActiveTab('CASHBOOK')}>Cashbook</Tab>
@@ -110,74 +138,90 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
         <Tab active={activeTab === 'PL'} onClick={() => setActiveTab('PL')}>Profit & Loss</Tab>
       </div>
 
-      <div className="flex-1 bg-white rounded-[2.5rem] shadow-sm border p-12 overflow-y-auto custom-scrollbar">
+      {activeTab !== 'ENTRY' && (
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border flex items-center gap-12 no-print">
+            <div className="flex items-center gap-3">
+              <label className="text-[11px] font-black uppercase text-blue-900 tracking-tighter">Period Start</label>
+              <input type="date" className="bg-slate-800 text-white border-none p-2.5 rounded-xl font-black text-[11px]" value={reportStart} onChange={e => setReportStart(e.target.value)} />
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-[11px] font-black uppercase text-blue-900 tracking-tighter">Period End</label>
+              <input type="date" className="bg-slate-800 text-white border-none p-2.5 rounded-xl font-black text-[11px]" value={reportEnd} onChange={e => setReportEnd(e.target.value)} />
+            </div>
+            <div className="flex-1 text-right flex justify-end gap-3">
+               <button onClick={handleExportCSV} className="bg-slate-900 text-white px-8 py-2 rounded-xl font-black uppercase text-[10px] shadow-xl">Excel Export</button>
+               <button onClick={() => window.print()} className="bg-blue-900 text-white px-8 py-2 rounded-xl font-black uppercase text-[10px] shadow-xl">Print Report</button>
+            </div>
+        </div>
+      )}
+
+      <div className="flex-1 bg-white rounded-[3rem] shadow-2xl border p-12 overflow-y-auto custom-scrollbar relative">
         {activeTab === 'ENTRY' && (
-          <div className="max-w-3xl space-y-8 animate-in fade-in duration-300">
-             <div className="border-l-8 border-blue-900 pl-6">
-               <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Finance Entry Console</h2>
-               <p className="text-[10px] font-bold text-black uppercase tracking-widest mt-1">Audit-Ready Ledger Posting</p>
+          <div className="max-w-4xl space-y-12 animate-in fade-in duration-300">
+             <div className="border-l-[10px] border-blue-900 pl-8">
+               <h2 className="text-4xl font-black text-black uppercase tracking-tighter">Voucher Entry Console</h2>
+               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Legal Ledger Authorization Portal</p>
              </div>
              
-             <div className="grid grid-cols-2 gap-8">
-                <Field label="Voucher Type">
-                   <select className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 text-black" value={type} onChange={e => setType(e.target.value as any)}>
-                      <option value="RECEIPT">RECEIPT (Cash In)</option>
-                      <option value="PAYMENT">PAYMENT (Cash Out)</option>
-                      <option value="JOURNAL">JOURNAL (Adjustment)</option>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <Field label="Voucher Date *">
+                   <input type="date" className="w-full border-2 p-4 rounded-2xl font-black text-sm bg-slate-50 text-black outline-none focus:border-blue-500 transition-all" value={date} onChange={e => setDate(e.target.value)} />
+                </Field>
+                <Field label="Voucher Classification">
+                   <select className="w-full border-2 p-4 rounded-2xl font-black text-sm bg-slate-50 text-black outline-none focus:border-blue-500 transition-all" value={type} onChange={e => setType(e.target.value as any)}>
+                      <option value="RECEIPT">RECEIPT (Cash Credit)</option>
+                      <option value="PAYMENT">PAYMENT (Cash Debit)</option>
+                      <option value="JOURNAL">JOURNAL (Audit Adj.)</option>
                    </select>
                 </Field>
                 <Field label="Account Group">
-                   <select className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 text-black" value={group} onChange={e => setGroup(e.target.value as any)}>
+                   <select className="w-full border-2 p-4 rounded-2xl font-black text-sm bg-slate-50 text-black outline-none focus:border-blue-500 transition-all" value={group} onChange={e => setGroup(e.target.value as any)}>
                       {ACCOUNT_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
                    </select>
                 </Field>
-                <Field label="Entity / Guest Name">
-                   <input className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 text-black" value={targetGuest} onChange={e => setTargetGuest(e.target.value)} placeholder="e.g. Rahul Kumar" />
+                <Field label="Entity Name (Guest/Company)">
+                   <input className="w-full border-2 p-4 rounded-2xl font-black text-sm bg-slate-50 text-black outline-none focus:border-blue-500 transition-all" value={targetGuest} onChange={e => setTargetGuest(e.target.value)} placeholder="e.g. John Doe / Amazon" />
                 </Field>
-                <Field label="Ledger Name">
-                   <input className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 text-black" value={ledger} onChange={e => setLedger(e.target.value)} placeholder="e.g. Cash Account" />
+                <Field label="Ledger Account">
+                   <input className="w-full border-2 p-4 rounded-2xl font-black text-sm bg-slate-50 text-black outline-none focus:border-blue-500 transition-all" value={ledger} onChange={e => setLedger(e.target.value)} placeholder="e.g. Bank Account / Petty Cash" />
                 </Field>
-                <Field label="Amount (₹)">
-                   <input type="number" className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 text-black" value={amount} onChange={e => setAmount(e.target.value)} />
+                <Field label="Transaction Amount (₹) *">
+                   <input type="number" className="w-full border-2 p-4 rounded-2xl font-black text-lg bg-white border-blue-100 text-blue-900 outline-none focus:border-blue-600 transition-all shadow-inner" value={amount} onChange={e => setAmount(e.target.value)} />
                 </Field>
-                <div className="col-span-2">
-                   <Field label="Voucher Narration">
-                      <textarea className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-gray-50 h-24 text-black resize-none" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Entry details..."></textarea>
+                <div className="col-span-full">
+                   <Field label="Audit Narration / Remarks">
+                      <textarea className="w-full border-2 p-5 rounded-[2rem] font-black text-sm bg-slate-50 h-32 text-black resize-none outline-none focus:border-blue-500 transition-all" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Detailed explanation for compliance..."></textarea>
                    </Field>
                 </div>
              </div>
-             <button onClick={handleEntry} className="bg-blue-900 text-white font-black px-12 py-5 rounded-2xl text-xs uppercase shadow-2xl hover:bg-black transition-all tracking-widest">Post Financial Record</button>
+             <button onClick={handleEntry} className="bg-blue-900 text-white font-black px-16 py-6 rounded-3xl text-sm uppercase shadow-2xl hover:bg-black hover:-translate-y-1 transition-all tracking-[0.3em]">Authorize & Post Entry</button>
           </div>
         )}
 
         {activeTab === 'LEDGER' && (
-          <div className="space-y-8 animate-in fade-in duration-300">
-             <div className="flex justify-between items-center border-b-8 border-blue-900 pb-6">
+          <div className="space-y-10 animate-in fade-in duration-300">
+             <div className="flex justify-between items-end border-b-[8px] border-blue-900 pb-8">
                 <div>
-                   <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Ledger Analysis</h2>
-                   <div className="mt-2 flex gap-2">
-                      <select className="border-2 p-2 rounded-xl font-black text-[10px] uppercase bg-gray-50" value={selectedLedger} onChange={e => setSelectedLedger(e.target.value)}>
+                   <h2 className="text-4xl font-black text-black uppercase tracking-tighter leading-none">Ledger Analysis</h2>
+                   <div className="mt-4 flex gap-3 no-print">
+                      <select className="border-2 border-slate-200 p-3 rounded-2xl font-black text-[12px] uppercase bg-white outline-none focus:border-blue-500 transition-all" value={selectedLedger} onChange={e => setSelectedLedger(e.target.value)}>
                         {ledgers.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
                    </div>
                 </div>
-                <div className="flex gap-2 no-print">
-                   <button onClick={handleDownloadLedger} className="bg-slate-100 text-blue-900 px-6 py-3 rounded-xl font-black text-[10px] uppercase border hover:bg-slate-200">Download CSV</button>
-                   <button onClick={() => window.print()} className="bg-blue-900 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase shadow-lg">Print Ledger</button>
-                </div>
              </div>
-             <div className="border rounded-[2.5rem] overflow-hidden shadow-sm">
-                <table className="w-full text-[11px] text-left">
-                   <thead className="bg-gray-900 text-white uppercase font-black">
-                      <tr><th className="p-6">Date</th><th className="p-6">Description</th><th className="p-6 text-right">Debit (₹)</th><th className="p-6 text-right">Credit (₹)</th></tr>
+             <div className="border-2 border-slate-50 rounded-[3rem] overflow-hidden shadow-2xl bg-white">
+                <table className="w-full text-[12px] text-left">
+                   <thead className="bg-slate-900 text-white uppercase font-black">
+                      <tr><th className="p-6">Transaction Date</th><th className="p-6">Registry Narrative</th><th className="p-6 text-right">Debit Out (₹)</th><th className="p-6 text-right">Credit In (₹)</th></tr>
                    </thead>
                    <tbody className="text-black font-bold uppercase">
                       {ledgerTransactions.map(t => (
-                        <tr key={t.id} className="border-b hover:bg-gray-50">
-                           <td className="p-6">{t.date}</td>
-                           <td className="p-6">{t.description} {t.entityName && `(From: ${t.entityName})`}</td>
-                           <td className="p-6 text-right">{t.type === 'PAYMENT' ? t.amount.toFixed(2) : '-'}</td>
-                           <td className="p-6 text-right">{t.type === 'RECEIPT' ? t.amount.toFixed(2) : '-'}</td>
+                        <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                           <td className="p-6 text-slate-400">{t.date}</td>
+                           <td className="p-6">{t.description} {t.entityName && <span className="text-blue-500 ml-2">[{t.entityName}]</span>}</td>
+                           <td className="p-6 text-right text-red-600 font-black">{t.type === 'PAYMENT' ? `₹${t.amount.toFixed(2)}` : '-'}</td>
+                           <td className="p-6 text-right text-green-700 font-black">{t.type === 'RECEIPT' ? `₹${t.amount.toFixed(2)}` : '-'}</td>
                         </tr>
                       ))}
                    </tbody>
@@ -187,93 +231,27 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
         )}
 
         {activeTab === 'CASHBOOK' && (
-          <div className="space-y-8 animate-in fade-in duration-300">
-             <div className="flex justify-between items-center border-b-8 border-green-700 pb-6">
-                <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Cashbook Registry</h2>
-                <div className="flex gap-2 no-print">
-                   <button onClick={handleDownloadCashbook} className="bg-slate-100 text-green-700 px-6 py-3 rounded-xl font-black text-[10px] uppercase border hover:bg-slate-200">Download CSV</button>
-                   <button onClick={handleWhatsAppCashbook} className="bg-green-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-green-700 transition-all tracking-widest">WhatsApp Share</button>
-                   <button onClick={() => window.print()} className="bg-green-700 text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg">Print Cashbook</button>
-                </div>
+          <div className="space-y-10 animate-in fade-in duration-300">
+             <div className="flex justify-between items-end border-b-[8px] border-green-700 pb-8">
+                <h2 className="text-4xl font-black text-black uppercase tracking-tighter leading-none">Cashbook Registry</h2>
+                <button onClick={handleWhatsAppCashbook} className="bg-green-600 text-white px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-2xl no-print">WhatsApp Share</button>
              </div>
-             <div className="border rounded-[2.5rem] overflow-hidden shadow-sm">
-                <table className="w-full text-[11px] text-left">
+             <div className="border-2 border-slate-50 rounded-[3rem] overflow-hidden shadow-2xl bg-white">
+                <table className="w-full text-[12px] text-left">
                    <thead className="bg-green-700 text-white uppercase font-black">
-                      <tr><th className="p-6">Date</th><th className="p-6">Narrative</th><th className="p-6 text-right">In (₹)</th><th className="p-6 text-right">Out (₹)</th></tr>
+                      <tr><th className="p-6">Date</th><th className="p-6">Daily Narrative</th><th className="p-6 text-right">Cash Inflow (₹)</th><th className="p-6 text-right">Cash Outflow (₹)</th></tr>
                    </thead>
                    <tbody className="text-black font-bold uppercase">
                       {cashbookTransactions.map(t => (
-                        <tr key={t.id} className="border-b hover:bg-green-50/20">
-                           <td className="p-6">{t.date}</td>
+                        <tr key={t.id} className="border-b border-slate-50 hover:bg-green-50/20 transition-colors">
+                           <td className="p-6 text-slate-400">{t.date}</td>
                            <td className="p-6">{t.description}</td>
-                           <td className="p-6 text-right text-green-700">{t.type === 'RECEIPT' ? t.amount.toFixed(2) : '-'}</td>
-                           <td className="p-6 text-right text-red-600">{t.type === 'PAYMENT' ? t.amount.toFixed(2) : '-'}</td>
+                           <td className="p-6 text-right text-green-700 font-black">{t.type === 'RECEIPT' ? `₹${t.amount.toFixed(2)}` : '-'}</td>
+                           <td className="p-6 text-right text-red-600 font-black">{t.type === 'PAYMENT' ? `₹${t.amount.toFixed(2)}` : '-'}</td>
                         </tr>
                       ))}
                    </tbody>
                 </table>
-             </div>
-          </div>
-        )}
-
-        {activeTab === 'PL' && (
-          <div className="space-y-12 animate-in fade-in duration-500">
-             <div className="border-b-8 border-blue-900 pb-6">
-                <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Profit & Loss Statement</h2>
-             </div>
-             <div className="grid grid-cols-2 gap-12">
-                <div className="space-y-4">
-                   <h3 className="font-black text-green-700 uppercase text-xs tracking-widest border-b pb-2">Total Incomes</h3>
-                   <div className="space-y-2">
-                      {transactions.filter(t => t.accountGroup.includes('Income')).map(t => (
-                        <div key={t.id} className="flex justify-between font-bold text-xs"><span>{t.ledger}</span><span>₹{t.amount.toFixed(2)}</span></div>
-                      ))}
-                   </div>
-                   <div className="border-t-2 pt-4 flex justify-between font-black text-lg"><span>GROSS INCOME</span><span>₹{calculatePL.income.toFixed(2)}</span></div>
-                </div>
-                <div className="space-y-4">
-                   <h3 className="font-black text-red-600 uppercase text-xs tracking-widest border-b pb-2">Total Expenses</h3>
-                   <div className="space-y-2">
-                      {transactions.filter(t => t.accountGroup.includes('Expense')).map(t => (
-                        <div key={t.id} className="flex justify-between font-bold text-xs"><span>{t.ledger}</span><span>₹{t.amount.toFixed(2)}</span></div>
-                      ))}
-                   </div>
-                   <div className="border-t-2 pt-4 flex justify-between font-black text-lg"><span>GROSS EXPENSE</span><span>₹{calculatePL.expense.toFixed(2)}</span></div>
-                </div>
-             </div>
-             <div className={`p-10 rounded-[3rem] text-center border-4 ${calculatePL.profit >= 0 ? 'bg-green-50 border-green-200 text-green-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2">Net Financial Position</p>
-                <p className="text-5xl font-black tracking-tighter">₹{Math.abs(calculatePL.profit).toFixed(2)} {calculatePL.profit >= 0 ? 'PROFIT' : 'LOSS'}</p>
-             </div>
-          </div>
-        )}
-
-        {activeTab === 'BS' && (
-          <div className="space-y-12 animate-in fade-in duration-500">
-             <div className="border-b-8 border-slate-900 pb-6">
-                <h2 className="text-3xl font-black text-black uppercase tracking-tighter">Consolidated Balance Sheet</h2>
-             </div>
-             <div className="grid grid-cols-2 gap-12">
-                <div className="space-y-6">
-                   <h3 className="font-black text-black uppercase text-xs tracking-widest border-b-2 border-slate-100 pb-2">Liabilities & Capital</h3>
-                   <div className="space-y-3">
-                      {transactions.filter(t => t.accountGroup === 'Capital' || t.accountGroup === 'Current Liability').map(t => (
-                        <div key={t.id} className="flex justify-between font-bold text-xs uppercase"><span>{t.ledger}</span><span>₹{t.amount.toFixed(2)}</span></div>
-                      ))}
-                   </div>
-                </div>
-                <div className="space-y-6">
-                   <h3 className="font-black text-black uppercase text-xs tracking-widest border-b-2 border-slate-100 pb-2">Assets</h3>
-                   <div className="space-y-3">
-                      {transactions.filter(t => t.accountGroup.includes('Asset')).map(t => (
-                        <div key={t.id} className="flex justify-between font-bold text-xs uppercase"><span>{t.ledger}</span><span>₹{t.amount.toFixed(2)}</span></div>
-                      ))}
-                   </div>
-                </div>
-             </div>
-             <div className="bg-slate-900 text-white p-10 rounded-[3rem] grid grid-cols-2 gap-8 text-center uppercase font-black">
-                <div><p className="text-[9px] opacity-40 mb-2">Total Liabilities</p><p className="text-2xl">₹{calculateBS.liabilities.toFixed(2)}</p></div>
-                <div><p className="text-[9px] opacity-40 mb-2">Total Assets</p><p className="text-2xl">₹{calculateBS.assets.toFixed(2)}</p></div>
              </div>
           </div>
         )}
@@ -283,12 +261,12 @@ const Accounting: React.FC<AccountingProps> = ({ transactions, setTransactions, 
 };
 
 const Tab: React.FC<{ active: boolean, onClick: () => void, children: React.ReactNode }> = ({ active, onClick, children }) => (
-  <button onClick={onClick} className={`px-8 py-3 rounded-full font-black text-[11px] uppercase tracking-widest border-2 transition-all shadow-sm ${active ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-black opacity-40 border-gray-100 hover:border-blue-200'}`}>{children}</button>
+  <button onClick={onClick} className={`px-10 py-4 rounded-[1.5rem] font-black text-[12px] uppercase tracking-widest border-2 transition-all shadow-xl shrink-0 ${active ? 'bg-blue-900 text-white border-blue-900 -translate-y-1' : 'bg-white text-black opacity-30 border-white hover:border-blue-200'}`}>{children}</button>
 );
 
 const Field: React.FC<{ label: string, children: React.ReactNode }> = ({ label, children }) => (
-  <div className="space-y-1.5">
-     <label className="text-[10px] font-black uppercase text-black opacity-40 ml-1">{label}</label>
+  <div className="space-y-2">
+     <label className="text-[11px] font-black uppercase text-slate-400 ml-2 tracking-widest">{label}</label>
      {children}
   </div>
 );

@@ -1,5 +1,5 @@
 {
-  "name": "HotelSphere",
+  "name": "HotelSphere 1",
   "description": "A comprehensive hostel management system featuring real-time room status, group bookings, document uploads, and integrated billing.",
   "requestFramePermissions": [
     "camera"
