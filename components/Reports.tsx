@@ -55,7 +55,6 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
     const income = filteredTx.filter(t => t.type === 'RECEIPT' && t.accountGroup.toLowerCase().includes('income')).reduce((s, t) => s + t.amount, 0);
     const expense = filteredTx.filter(t => t.type === 'PAYMENT' && t.accountGroup.toLowerCase().includes('expense')).reduce((s, t) => s + t.amount, 0);
     
-    // Balance Sheet logic
     const cumulativeTx = transactions.filter(t => t.date <= endDate);
     const assets = cumulativeTx.filter(t => t.accountGroup.includes('Asset') || t.ledger.toLowerCase().includes('cash') || t.ledger.toLowerCase().includes('bank'))
       .reduce((s, t) => s + (t.type === 'RECEIPT' ? t.amount : -t.amount), 0);
@@ -79,8 +78,8 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
   const getDocStatus = (g: Guest) => {
     const docs = [];
     if (g.documents?.photo) docs.push('PHOTO');
-    if (g.documents?.aadharFront || g.documents?.passportFront) docs.push('ID-DOC');
-    return docs.length > 0 ? docs.join(' | ') : 'MISSING';
+    if (g.documents?.aadharFront || g.documents?.passportFront) docs.push('ID');
+    return docs.length > 0 ? docs.join('|') : 'MISSING';
   };
 
   const exportToExcel = () => {
@@ -93,6 +92,22 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
         bookings.filter(b => b.checkInDate >= startDate && b.checkInDate <= endDate).forEach((b, i) => {
           const g = guests.find(guest => guest.id === b.guestId);
           content += `${i+1},"${g?.name || ''}","${g?.nationality || 'Indian'}","${g?.idType || 'Aadhar'}","${g?.idNumber || ''}","${g?.arrivalFrom || ''}","${g?.nextDestination || ''}","${g?.address?.replace(/"/g, '""') || ''}","${b.checkInDate}"\n`;
+        });
+        break;
+      case 'CHECK_IN_REPORT':
+        content = "S.No,Unit,Guest Name,Phone,Nationality,Check-In Date,Check-In Time,Docs Status\n";
+        bookings.filter(b => b.checkInDate >= startDate && b.checkInDate <= endDate).forEach((b, i) => {
+          const g = guests.find(guest => guest.id === b.guestId);
+          const r = rooms.find(rm => rm.id === b.roomId);
+          content += `${i+1},"${r?.number}","${g?.name}","${g?.phone}","${g?.nationality}","${b.checkInDate}","${b.checkInTime}","${g ? getDocStatus(g) : 'N/A'}"\n`;
+        });
+        break;
+      case 'CHECK_OUT_REPORT':
+        content = "S.No,Unit,Guest Name,Phone,Nationality,Check-Out Date,Check-Out Time,Status\n";
+        bookings.filter(b => b.checkOutDate >= startDate && b.checkOutDate <= endDate && b.status === 'COMPLETED').forEach((b, i) => {
+          const g = guests.find(guest => guest.id === b.guestId);
+          const r = rooms.find(rm => rm.id === b.roomId);
+          content += `${i+1},"${r?.number}","${g?.name}","${g?.phone}","${g?.nationality}","${b.checkOutDate}","${b.checkOutTime}","COMPLETED"\n`;
         });
         break;
       case 'GUEST_REGISTER':
@@ -165,7 +180,7 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
   return (
     <div className="p-4 md:p-8 bg-white min-h-full flex flex-col animate-in fade-in duration-500 pb-40">
       <div className="flex gap-1 mb-8 overflow-x-auto pb-4 no-print scrollbar-hide border-b">
-        {(['OCCUPANCY_CHART', 'POLICE_REPORT', 'GUEST_REGISTER', 'COLLECTION', 'PROFIT_LOSS', 'BALANCE_SHEET', 'SUMMARY'] as ReportType[]).map(r => (
+        {(['OCCUPANCY_CHART', 'POLICE_REPORT', 'CHECK_IN_REPORT', 'CHECK_OUT_REPORT', 'GUEST_REGISTER', 'COLLECTION', 'PROFIT_LOSS', 'BALANCE_SHEET', 'SUMMARY'] as ReportType[]).map(r => (
            <Tab key={r} active={activeReport === r} label={r.replace(/_/g, ' ')} onClick={() => setActiveReport(r)} />
         ))}
       </div>
@@ -206,7 +221,7 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
                         <th className="p-4">Address</th>
                         <th className="p-4">From</th>
                         <th className="p-4">To</th>
-                        <th className="p-4">Doc Uploaded</th>
+                        <th className="p-4">Docs</th>
                       </tr>
                    </thead>
                    <tbody className="divide-y font-bold uppercase text-gray-700">
@@ -223,11 +238,91 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
                                <td className="p-4 max-w-xs truncate">{g?.address}</td>
                                <td className="p-4">{g?.arrivalFrom || 'Direct'}</td>
                                <td className="p-4">{g?.nextDestination || 'Unknown'}</td>
+                               <td className="p-4 font-black text-[8px]">{g ? getDocStatus(g) : '-'}</td>
+                            </tr>
+                         );
+                      })}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+        )}
+
+        {activeReport === 'CHECK_IN_REPORT' && (
+          <div className="space-y-4">
+             {renderHeader("Detailed Check-In Registry")}
+             <div className="border rounded-[2.5rem] overflow-x-auto bg-white shadow-sm overflow-hidden">
+                <table className="w-full text-[10px] text-left border-collapse min-w-[1300px]">
+                   <thead className="bg-blue-600 text-white font-black uppercase sticky top-0">
+                      <tr>
+                        <th className="p-4">Unit</th>
+                        <th className="p-4">Guest Name</th>
+                        <th className="p-4">Phone</th>
+                        <th className="p-4">Nationality</th>
+                        <th className="p-4">Check-In</th>
+                        <th className="p-4">Time</th>
+                        <th className="p-4">Docs Status</th>
+                        <th className="p-4">Reference</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y font-bold uppercase text-gray-700">
+                      {bookings.filter(b => b.checkInDate >= startDate && b.checkInDate <= endDate).map((b) => {
+                         const g = guests.find(guest => guest.id === b.guestId);
+                         const r = rooms.find(rm => rm.id === b.roomId);
+                         const docStat = g ? getDocStatus(g) : 'MISSING';
+                         return (
+                            <tr key={b.id} className="hover:bg-blue-50/20 transition-colors">
+                               <td className="p-4 font-black text-blue-600">#{r?.number}</td>
+                               <td className="p-4">{g?.name}</td>
+                               <td className="p-4">{g?.phone}</td>
+                               <td className="p-4">{g?.nationality}</td>
+                               <td className="p-4">{b.checkInDate}</td>
+                               <td className="p-4">{b.checkInTime}</td>
                                <td className="p-4">
-                                  <span className={`px-2 py-1 rounded-full text-[8px] font-black ${g?.documents?.photo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                                     {g ? (g.documents?.photo ? 'YES' : 'NO') : '-'}
-                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[8px] font-black ${docStat === 'MISSING' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>{docStat}</span>
                                </td>
+                               <td className="p-4 text-slate-400">#{b.bookingNo.slice(-6)}</td>
+                            </tr>
+                         );
+                      })}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+        )}
+
+        {activeReport === 'CHECK_OUT_REPORT' && (
+          <div className="space-y-4">
+             {renderHeader("Detailed Check-Out Register")}
+             <div className="border rounded-[2.5rem] overflow-x-auto bg-white shadow-sm overflow-hidden">
+                <table className="w-full text-[10px] text-left border-collapse min-w-[1300px]">
+                   <thead className="bg-red-600 text-white font-black uppercase sticky top-0">
+                      <tr>
+                        <th className="p-4">Unit</th>
+                        <th className="p-4">Guest Name</th>
+                        <th className="p-4">Phone</th>
+                        <th className="p-4">Nationality</th>
+                        <th className="p-4">Check-Out</th>
+                        <th className="p-4">Time</th>
+                        <th className="p-4">Total Paid</th>
+                        <th className="p-4">Bill Ref</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y font-bold uppercase text-gray-700">
+                      {bookings.filter(b => b.checkOutDate >= startDate && b.checkOutDate <= endDate && b.status === 'COMPLETED').map((b) => {
+                         const g = guests.find(guest => guest.id === b.guestId);
+                         const r = rooms.find(rm => rm.id === b.roomId);
+                         const paidAmt = (b.payments || []).reduce((s, p) => s + p.amount, 0);
+                         return (
+                            <tr key={b.id} className="hover:bg-red-50/20 transition-colors">
+                               <td className="p-4 font-black text-red-600">#{r?.number}</td>
+                               <td className="p-4">{g?.name}</td>
+                               <td className="p-4">{g?.phone}</td>
+                               <td className="p-4">{g?.nationality}</td>
+                               <td className="p-4">{b.checkOutDate}</td>
+                               <td className="p-4">{b.checkOutTime}</td>
+                               <td className="p-4 font-black">₹{paidAmt.toFixed(2)}</td>
+                               <td className="p-4 text-slate-400">#{b.bookingNo.slice(-6)}</td>
                             </tr>
                          );
                       })}
@@ -313,7 +408,6 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
                    </div>
                 </div>
              </div>
-             <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Audited System Record • Finalized Statement</p>
           </div>
         )}
 
@@ -372,7 +466,6 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
           </div>
         )}
 
-        {/* Guest Movement Register */}
         {activeReport === 'GUEST_REGISTER' && (
           <div className="space-y-6">
             {renderHeader(`Daily Guest Movement Index`)}
@@ -403,7 +496,7 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
                         </td>
                         <td className="p-6">{g?.nationality || 'Indian'}</td>
                         <td className="p-6">
-                           <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${docStatus.includes('PHOTO') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                           <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${docStatus !== 'MISSING' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                               {docStatus}
                            </span>
                         </td>
@@ -419,7 +512,29 @@ const Reports: React.FC<ReportsProps> = ({ bookings, guests, rooms, transactions
           </div>
         )}
 
-        {/* Performance Summary Cards */}
+        {activeReport === 'COLLECTION' && (
+          <div className="space-y-6">
+            {renderHeader(`Finance Collection Index`)}
+            <div className="border-2 border-slate-100 rounded-[3rem] overflow-hidden shadow-2xl bg-white">
+              <table className="w-full text-[11px] border-collapse">
+                <thead className="bg-green-700 text-white uppercase font-black tracking-widest">
+                  <tr><th className="p-6 text-left">Posting Date</th><th className="p-6 text-left">Entity / Source</th><th className="p-6 text-left">Account</th><th className="p-6 text-right">Amount (INR)</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 text-black uppercase font-bold">
+                  {transactions.filter(t => t.type === 'RECEIPT' && t.date >= startDate && t.date <= endDate).map(t => (
+                    <tr key={t.id} className="hover:bg-green-50/30 transition-colors">
+                      <td className="p-6 text-slate-400">{t.date}</td>
+                      <td className="p-6 text-slate-900">{t.entityName || 'General Reception'}</td>
+                      <td className="p-6 text-blue-900">{t.ledger}</td>
+                      <td className="p-6 text-right font-black text-green-700 text-base">₹{t.amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {activeReport === 'SUMMARY' && (
           <div className="space-y-12">
             {renderHeader(`Property Performance Index`)}
