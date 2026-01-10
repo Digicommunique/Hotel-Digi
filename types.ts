@@ -35,10 +35,12 @@ export enum RoomType {
   AC_FAMILY = 'AC FAMILY ROOM'
 }
 
-export interface RoomInventoryItem {
+export interface Occupant {
   id: string;
   name: string;
-  quantity: number;
+  gender: 'Male' | 'Female' | 'Other';
+  idFront?: string;
+  idBack?: string;
 }
 
 export interface Guest {
@@ -193,6 +195,7 @@ export interface Booking {
   agent?: string;
   purpose?: string;
   company?: string;
+  occupants?: Occupant[];
   secondaryGuest?: {
     name: string;
     gender: 'Male' | 'Female' | 'Other';
@@ -225,6 +228,9 @@ export interface HostelSettings {
   roomTypes: string[];
   gstNumber?: string;
   taxRate?: number;
+  cgstRate?: number;
+  sgstRate?: number;
+  igstRate?: number;
   hsnCode?: string;
   upiId?: string;
   adminPassword?: string;

@@ -18,7 +18,7 @@ const Settings: React.FC<SettingsProps> = ({
   settings, setSettings, rooms, setRooms, setBookings, setTransactions,
   supervisors, setSupervisors
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'GENERAL' | 'ROOMS' | 'SUPERVISORS' | 'DATA' | 'TAX' | 'SECURITY'>('GENERAL');
+  const [activeSubTab, setActiveSubTab] = useState<'GENERAL' | 'ROOMS' | 'SUPERVISORS' | 'DATA' | 'TAX' | 'SECURITY' | 'CLOUD'>('GENERAL');
   const [tempSettings, setTempSettings] = useState<HostelSettings>(settings);
   
   const [newRoom, setNewRoom] = useState<Partial<Room>>({ number: '', floor: 1, type: settings.roomTypes[0] || '', price: 0 });
@@ -122,7 +122,6 @@ const Settings: React.FC<SettingsProps> = ({
     <div className="p-4 md:p-8 bg-[#f8fafc] min-h-full pb-32 text-black overflow-x-hidden">
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         
-        {/* Tabs - Scrollable on mobile */}
         <div className="flex items-center justify-between bg-white p-2 md:p-3 rounded-2xl md:rounded-[2rem] border shadow-xl sticky top-2 z-10 overflow-x-auto scrollbar-hide no-print gap-1">
           <SubTab active={activeSubTab === 'GENERAL'} label="Profile" onClick={() => setActiveSubTab('GENERAL')} />
           <SubTab active={activeSubTab === 'ROOMS'} label="Inventory" onClick={() => setActiveSubTab('ROOMS')} />
@@ -130,6 +129,7 @@ const Settings: React.FC<SettingsProps> = ({
           <SubTab active={activeSubTab === 'DATA'} label="Backups" onClick={() => setActiveSubTab('DATA')} />
           <SubTab active={activeSubTab === 'TAX'} label="Taxation" onClick={() => setActiveSubTab('TAX')} />
           <SubTab active={activeSubTab === 'SECURITY'} label="Access" onClick={() => setActiveSubTab('SECURITY')} />
+          <SubTab active={activeSubTab === 'CLOUD'} label="Cloud" onClick={() => setActiveSubTab('CLOUD')} />
         </div>
 
         {activeSubTab === 'GENERAL' && (
@@ -234,66 +234,72 @@ const Settings: React.FC<SettingsProps> = ({
         )}
 
         {activeSubTab === 'SUPERVISORS' && (
-          <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
-             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-8 animate-in fade-in duration-500">
+             <div className="flex justify-between items-center">
                 <div>
-                   <h2 className="text-2xl md:text-3xl font-black text-blue-900 uppercase tracking-tighter leading-none">Supervisor Registry</h2>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Staff deployments and assignments</p>
+                   <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Supervisor Roster</h3>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage staff access and floor assignments</p>
                 </div>
-                <button onClick={() => setShowAddSupervisor(true)} className="w-full md:w-auto bg-blue-600 text-white px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-xl hover:bg-black transition-all">Enroll Supervisor</button>
+                <button onClick={() => setShowAddSupervisor(true)} className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ Add Member</button>
              </div>
 
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {supervisors.map(sup => (
-                   <div key={sup.id} className="bg-white border-2 rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-sm group hover:border-blue-500 transition-all">
-                      <div className="flex justify-between items-start mb-6">
-                        <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl md:rounded-2xl flex items-center justify-center text-xl">👤</div>
-                        <button onClick={() => handleDeleteSupervisor(sup.id)} className="text-red-500 font-black text-[9px] uppercase hover:underline">Remove</button>
-                      </div>
-                      <h3 className="text-xl md:text-2xl font-black text-blue-900 uppercase tracking-tighter leading-none truncate">{sup.name}</h3>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 mb-6">UID: <span className="text-blue-600">{sup.loginId}</span></p>
-                      
-                      <div className="space-y-2 border-t pt-4">
-                         <p className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Inventory Management</p>
-                         <p className="text-[11px] font-black text-slate-700">{sup.assignedRoomIds.length} Rooms Assigned</p>
-                         <div className="flex flex-wrap gap-1 pt-2">
-                            {sup.assignedRoomIds.slice(0, 4).map(rid => (
-                               <span key={rid} className="bg-slate-100 text-[7px] font-black px-2 py-1 rounded-lg">R{rooms.find(x=>x.id===rid)?.number}</span>
-                            ))}
-                            {sup.assignedRoomIds.length > 4 && <span className="bg-slate-100 text-[7px] font-black px-2 py-1 rounded-lg">+{sup.assignedRoomIds.length-4}</span>}
-                         </div>
-                      </div>
-                   </div>
+                  <div key={sup.id} className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6 group">
+                     <div className="flex justify-between items-start">
+                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-900 text-xl font-black">
+                           {sup.name.charAt(0)}
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${sup.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                           {sup.status}
+                        </span>
+                     </div>
+                     <div>
+                        <h4 className="text-xl font-black text-blue-900 uppercase tracking-tight">{sup.name}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">ID: {sup.loginId}</p>
+                     </div>
+                     <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
+                        <p className="text-[9px] font-black uppercase text-blue-900">
+                           {sup.assignedRoomIds?.length || 0} Units Assigned
+                        </p>
+                        <button onClick={() => handleDeleteSupervisor(sup.id)} className="text-red-400 hover:text-red-600 font-black text-xs uppercase">Delete</button>
+                     </div>
+                  </div>
                 ))}
              </div>
 
              {showAddSupervisor && (
-               <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 md:p-4">
-                  <div className="bg-white w-full max-w-2xl h-full md:h-auto overflow-y-auto rounded-3xl md:rounded-[4rem] shadow-2xl animate-in zoom-in duration-300">
-                     <div className="bg-blue-900 p-6 md:p-10 text-white flex justify-between items-center shrink-0">
-                        <h2 className="text-xl md:text-2xl font-black uppercase">Enrollment</h2>
-                        <button onClick={() => setShowAddSupervisor(false)} className="uppercase font-black text-[10px]">Exit</button>
+               <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+                     <div className="bg-blue-900 p-10 text-white flex justify-between items-center">
+                        <h3 className="text-2xl font-black uppercase tracking-tighter">Add Staff Member</h3>
+                        <button onClick={() => setShowAddSupervisor(false)} className="text-[10px] font-black uppercase opacity-60">Cancel</button>
                      </div>
-                     <div className="p-6 md:p-12 space-y-6 md:space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                           <Input label="Staff Name *" value={newSup.name} onChange={v => setNewSup({...newSup, name: v})} />
-                           <Input label="Login ID *" value={newSup.loginId} onChange={v => setNewSup({...newSup, loginId: v})} />
-                           <div className="md:col-span-2">
-                             <Input label="Access Key *" type="password" value={newSup.password} onChange={v => setNewSup({...newSup, password: v})} />
-                           </div>
+                     <div className="p-10 space-y-6">
+                        <Input label="Full Name" value={newSup.name} onChange={v => setNewSup({...newSup, name: v})} />
+                        <div className="grid grid-cols-2 gap-4">
+                           <Input label="Login ID" value={newSup.loginId} onChange={v => setNewSup({...newSup, loginId: v})} />
+                           <Input label="Password" type="password" value={newSup.password} onChange={v => setNewSup({...newSup, password: v})} />
                         </div>
-                        <div className="space-y-3">
-                           <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Inventory Assignment</label>
-                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-3 border-2 rounded-2xl bg-slate-50 custom-scrollbar">
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Select Room Blocks</label>
+                           <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto custom-scrollbar p-2 bg-slate-50 rounded-2xl border">
                               {rooms.map(r => (
-                                 <button key={r.id} onClick={() => {
+                                <button 
+                                  key={r.id}
+                                  onClick={() => {
                                     const ids = newSup.assignedRoomIds || [];
-                                    setNewSup({...newSup, assignedRoomIds: ids.includes(r.id) ? ids.filter(x => x !== r.id) : [...ids, r.id]});
-                                 }} className={`p-2 rounded-xl text-[8px] md:text-[9px] font-black uppercase border-2 transition-all ${newSup.assignedRoomIds?.includes(r.id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-400 border-slate-100'}`}>{r.number}</button>
+                                    const updated = ids.includes(r.id) ? ids.filter(x => x !== r.id) : [...ids, r.id];
+                                    setNewSup({...newSup, assignedRoomIds: updated});
+                                  }}
+                                  className={`p-2 rounded-xl border-2 font-black text-[9px] uppercase transition-all ${newSup.assignedRoomIds?.includes(r.id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-white'}`}
+                                >
+                                  Room {r.number}
+                                </button>
                               ))}
                            </div>
                         </div>
-                        <button onClick={handleSaveSupervisor} className="w-full bg-blue-900 text-white font-black py-5 rounded-[1.5rem] uppercase text-xs shadow-2xl mt-4">Authorize Access</button>
+                        <button onClick={handleSaveSupervisor} className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-black transition-all">Authorize & Create Account</button>
                      </div>
                   </div>
                </div>
@@ -302,34 +308,59 @@ const Settings: React.FC<SettingsProps> = ({
         )}
 
         {activeSubTab === 'DATA' && (
-          <div className="max-w-4xl mx-auto space-y-6 md:space-y-10 animate-in fade-in duration-500">
-            <div className="bg-blue-900 p-8 md:p-12 rounded-3xl md:rounded-[4rem] text-white space-y-6 shadow-2xl relative overflow-hidden text-center md:text-left">
-               <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter leading-tight">Property Data Vault</h2>
-               <button onClick={exportDatabase} className="relative z-10 w-full bg-white text-blue-900 py-5 md:py-6 rounded-2xl md:rounded-3xl font-black uppercase text-[10px] md:text-xs shadow-2xl hover:scale-105 transition-all">Download Full System Backup</button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-              <div className="bg-white p-8 md:p-10 rounded-3xl md:rounded-[3rem] border-2 border-dashed border-slate-200 text-center space-y-4 md:space-y-6">
-                 <h3 className="text-lg md:text-xl font-black text-slate-900 uppercase">Restore Records</h3>
-                 <div className="relative">
-                    <button className="w-full bg-slate-900 text-white px-4 py-4 rounded-2xl font-black uppercase text-[10px]">Upload Backup</button>
-                    <input type="file" accept=".json" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportFile} />
-                 </div>
-              </div>
-              <div className="bg-white p-8 md:p-10 rounded-3xl md:rounded-[3rem] border-2 border-red-100 text-center space-y-4 md:space-y-6">
-                 <h3 className="text-lg md:text-xl font-black text-red-600 uppercase">Purge History</h3>
-                 <button onClick={handleClearBookings} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Format Data</button>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
+             <section className="bg-white p-10 rounded-[3rem] border shadow-sm space-y-8">
+                <div className="flex items-center gap-6">
+                   <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-4xl">💾</div>
+                   <div>
+                      <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">System Backups</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global data export and recovery</p>
+                   </div>
+                </div>
+                <div className="space-y-4">
+                   <button onClick={exportDatabase} className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl">Download Master JSON Export</button>
+                   <div className="relative">
+                      <button className="w-full bg-white border-2 border-blue-900 text-blue-900 py-5 rounded-2xl font-black uppercase text-xs">Restore System from File</button>
+                      <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportFile} />
+                   </div>
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed text-center px-4">
+                   Exports include all Guest Profiles, Booking History, Transactions, Room Data, and Global Settings. Restoring will overwrite existing local data.
+                </p>
+             </section>
+
+             <section className="bg-red-50 p-10 rounded-[3rem] border border-red-100 space-y-8">
+                <div className="flex items-center gap-6">
+                   <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-4xl">⚠️</div>
+                   <div>
+                      <h3 className="text-2xl font-black text-red-600 uppercase tracking-tighter leading-none">Danger Zone</h3>
+                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mt-1">Irreversible System Actions</p>
+                   </div>
+                </div>
+                <div className="space-y-4">
+                   <button onClick={handleClearBookings} className="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-black transition-all">Factory Reset (Wipe Bills & Txs)</button>
+                   <p className="text-[9px] font-black text-red-400 uppercase text-center">This will delete all bookings and financial ledger. Rooms and guest database will remain.</p>
+                </div>
+             </section>
           </div>
         )}
 
         {activeSubTab === 'TAX' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 animate-in fade-in duration-500">
              <section className="bg-white p-6 md:p-10 rounded-3xl md:rounded-[3rem] border shadow-sm space-y-6 md:space-y-8">
                 <h3 className="font-black uppercase text-xs text-blue-900 tracking-widest border-b pb-4 md:pb-6">Taxation Profile</h3>
                 <Input label="GSTIN Number" value={tempSettings.gstNumber || ''} onChange={v => handleUpdate('gstNumber', v)} />
                 <Input label="SAC/HSN Code" value={tempSettings.hsnCode || '9963'} onChange={v => handleUpdate('hsnCode', v)} />
-                <Input label="GST Rate (%)" type="number" value={tempSettings.taxRate?.toString() || '12'} onChange={v => handleUpdate('taxRate', parseFloat(v))} />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="CGST Rate (%)" type="number" value={tempSettings.cgstRate?.toString() || '6'} onChange={v => handleUpdate('cgstRate', parseFloat(v))} />
+                  <Input label="SGST Rate (%)" type="number" value={tempSettings.sgstRate?.toString() || '6'} onChange={v => handleUpdate('sgstRate', parseFloat(v))} />
+                </div>
+                <Input label="IGST Rate (%)" type="number" value={tempSettings.igstRate?.toString() || '12'} onChange={v => handleUpdate('igstRate', parseFloat(v))} />
+                
+                <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
+                   <p className="text-[10px] font-bold text-orange-800 uppercase">Note: CGST + SGST is used for intra-state billing. IGST is used for inter-state billing. These will be itemized in the Tax Invoice.</p>
+                </div>
              </section>
              <div className="bg-blue-50 p-6 md:p-10 rounded-3xl md:rounded-[3rem] border border-blue-100 flex flex-col justify-center text-center space-y-4">
                 <div className="text-4xl">🧾</div>
@@ -355,6 +386,243 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-[10px] font-bold text-blue-400 uppercase leading-relaxed px-4 md:px-10">
                    Manage tiered access credentials for different system functions. Ensure master keys are rotated periodically for property security.
                 </p>
+             </div>
+          </div>
+        )}
+
+        {activeSubTab === 'CLOUD' && (
+          <div className="bg-white p-12 rounded-[3rem] border shadow-sm space-y-8 animate-in fade-in duration-500">
+             <div className="flex items-center gap-6 border-b pb-8">
+               <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-4xl">☁️</div>
+               <div>
+                 <h2 className="text-2xl font-black text-black uppercase tracking-tighter">Supabase Real-time Cloud</h2>
+                 <p className="text-[10px] font-bold text-black uppercase tracking-widest">Multi-terminal Data Synchronization</p>
+               </div>
+             </div>
+             <div className="p-10 bg-blue-50 border-2 border-dashed border-blue-200 rounded-[3rem] space-y-6">
+                <p className="text-xs text-black font-black uppercase tracking-tight">Run this SQL in Supabase Editor to initialize/fix full remote database:</p>
+                <pre className="bg-white p-6 rounded-2xl border font-mono text-[10px] text-black overflow-x-auto shadow-inner select-all leading-relaxed h-[600px] overflow-y-auto">
+{`-- HOTELSPHERE PRO: ABSOLUTE MASTER SETUP SCRIPT --
+-- RUN THIS IN SUPABASE SQL EDITOR TO RESOLVE SCHEMA MISMATCH ERRORS --
+
+-- 1. TABLES CONSTRUCTION --
+CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, number TEXT, floor INT, type TEXT, price NUMERIC, status TEXT, "currentBookingId" TEXT);
+
+CREATE TABLE IF NOT EXISTS guests (
+    id TEXT PRIMARY KEY, 
+    name TEXT, 
+    "surName" TEXT,
+    "givenName" TEXT,
+    gender TEXT,
+    dob TEXT,
+    phone TEXT, 
+    email TEXT, 
+    address TEXT, 
+    city TEXT, 
+    state TEXT, 
+    nationality TEXT, 
+    "idType" TEXT,
+    "idNumber" TEXT, 
+    adults INT DEFAULT 1, 
+    children INT DEFAULT 0, 
+    kids INT DEFAULT 0, 
+    others INT DEFAULT 0, 
+    gstin TEXT,
+    country TEXT,
+    "passportNo" TEXT,
+    "passportPlaceOfIssue" TEXT,
+    "passportDateOfIssue" TEXT,
+    "passportDateOfExpiry" TEXT,
+    "visaNo" TEXT,
+    "visaType" TEXT,
+    "visaPlaceOfIssue" TEXT,
+    "visaDateOfIssue" TEXT,
+    "visaDateOfExpiry" TEXT,
+    "embassyCountry" TEXT,
+    "arrivalFrom" TEXT,
+    "nextDestination" TEXT,
+    "arrivalInIndiaDate" TEXT,
+    "stayDurationIndia" TEXT,
+    "purposeOfVisit" TEXT,
+    "employedInIndia" BOOLEAN,
+    "contactInIndia" TEXT,
+    "cellInIndia" TEXT,
+    "residingCountryContact" TEXT,
+    "addressInIndia" TEXT,
+    "applicationId" TEXT,
+    remarks TEXT,
+    documents JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS bookings (
+    id TEXT PRIMARY KEY, 
+    "bookingNo" TEXT, 
+    "roomId" TEXT, 
+    "guestId" TEXT, 
+    "groupId" TEXT, 
+    "checkInDate" TEXT, 
+    "checkInTime" TEXT, 
+    "checkOutDate" TEXT, 
+    "checkOutTime" TEXT, 
+    status TEXT, 
+    charges JSONB DEFAULT '[]'::jsonb, 
+    payments JSONB DEFAULT '[]'::jsonb, 
+    "basePrice" NUMERIC, 
+    discount NUMERIC DEFAULT 0, 
+    adults INT,
+    children INT,
+    kids INT,
+    others INT,
+    "mealPlan" TEXT, 
+    agent TEXT, 
+    purpose TEXT, 
+    company TEXT,
+    occupants JSONB DEFAULT '[]'::jsonb,
+    "secondaryGuest" JSONB
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+    id TEXT PRIMARY KEY, 
+    date TEXT, 
+    type TEXT, 
+    "accountGroup" TEXT, 
+    ledger TEXT, 
+    amount NUMERIC, 
+    "entityName" TEXT, 
+    description TEXT, 
+    "referenceId" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS groups (
+    id TEXT PRIMARY KEY, 
+    "groupName" TEXT, 
+    "groupType" TEXT, 
+    "headName" TEXT, 
+    phone TEXT, 
+    email TEXT, 
+    "orgName" TEXT, 
+    "gstNumber" TEXT, 
+    "billingPreference" TEXT, 
+    documents JSONB DEFAULT '{}'::jsonb, 
+    status TEXT
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    id TEXT PRIMARY KEY, 
+    name TEXT, 
+    address TEXT, 
+    agents JSONB DEFAULT '[]'::jsonb, 
+    "roomTypes" JSONB DEFAULT '[]'::jsonb,
+    "gstNumber" TEXT,
+    "taxRate" NUMERIC DEFAULT 12,
+    "cgstRate" NUMERIC DEFAULT 6,
+    "sgstRate" NUMERIC DEFAULT 6,
+    "igstRate" NUMERIC DEFAULT 12,
+    "hsnCode" TEXT DEFAULT '9963',
+    "upiId" TEXT,
+    "adminPassword" TEXT DEFAULT 'admin',
+    "receptionistPassword" TEXT DEFAULT 'receptionist',
+    "accountantPassword" TEXT DEFAULT 'accountant',
+    "supervisorPassword" TEXT DEFAULT 'supervisor',
+    logo TEXT,
+    signature TEXT
+);
+
+CREATE TABLE IF NOT EXISTS supervisors (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    "loginId" TEXT,
+    password TEXT,
+    "assignedRoomIds" JSONB DEFAULT '[]'::jsonb,
+    status TEXT DEFAULT 'ACTIVE',
+    "lastActive" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "shiftLogs" (id TEXT PRIMARY KEY, "bookingId" TEXT, "guestName" TEXT, "fromRoom" TEXT, "toRoom" TEXT, date TEXT, reason TEXT);
+CREATE TABLE IF NOT EXISTS "cleaningLogs" (id TEXT PRIMARY KEY, "roomId" TEXT, date TEXT, "staffName" TEXT);
+CREATE TABLE IF NOT EXISTS quotations (id TEXT PRIMARY KEY, date TEXT, "guestName" TEXT, amount NUMERIC, remarks TEXT);
+
+-- 2. SCHEMA MIGRATION / RECOVERY --
+-- Run these if tables already exist but required columns are reported missing --
+
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "surName" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "givenName" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "gender" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "dob" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS gstin TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "passportNo" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "passportPlaceOfIssue" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "passportDateOfIssue" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "passportDateOfExpiry" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "visaNo" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "visaType" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "visaPlaceOfIssue" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "visaDateOfIssue" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "visaDateOfExpiry" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "embassyCountry" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "arrivalFrom" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "nextDestination" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "arrivalInIndiaDate" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "stayDurationIndia" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "purposeOfVisit" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "employedInIndia" BOOLEAN;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "contactInIndia" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "cellInIndia" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "residingCountryContact" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "addressInIndia" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS "applicationId" TEXT;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS remarks TEXT;
+
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS adults INT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS children INT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS kids INT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS others INT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "mealPlan" TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS agent TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS purpose TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS company TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS occupants JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "secondaryGuest" JSONB;
+
+-- 3. SECURITY POLICIES (RLS) --
+ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE supervisors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "shiftLogs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "cleaningLogs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quotations ENABLE ROW LEVEL SECURITY;
+
+-- CLEAN UP EXISTING POLICIES TO AVOID DUPLICATES --
+DROP POLICY IF EXISTS "AllowAll" ON rooms;
+DROP POLICY IF EXISTS "AllowAll" ON guests;
+DROP POLICY IF EXISTS "AllowAll" ON bookings;
+DROP POLICY IF EXISTS "AllowAll" ON transactions;
+DROP POLICY IF EXISTS "AllowAll" ON groups;
+DROP POLICY IF EXISTS "AllowAll" ON settings;
+DROP POLICY IF EXISTS "AllowAll" ON supervisors;
+DROP POLICY IF EXISTS "AllowAll" ON "shiftLogs";
+DROP POLICY IF EXISTS "AllowAll" ON "cleaningLogs";
+DROP POLICY IF EXISTS "AllowAll" ON quotations;
+
+CREATE POLICY "AllowAll" ON rooms FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON guests FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON bookings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON groups FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON supervisors FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON "shiftLogs" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON "cleaningLogs" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "AllowAll" ON quotations FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. CACHE REFRESH --
+NOTIFY pgrst, 'reload schema';`}
+                </pre>
              </div>
           </div>
         )}

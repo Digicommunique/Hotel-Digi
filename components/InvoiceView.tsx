@@ -12,9 +12,11 @@ interface InvoiceViewProps {
 }
 
 const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings, room, settings, payments }) => {
-  const taxRate = settings.taxRate || 12;
+  // Use explicit GST rates from settings
+  const cgstRate = settings.cgstRate || 0;
+  const sgstRate = settings.sgstRate || 0;
+  const igstRate = settings.igstRate || 0;
 
-  // Calculate totals based on whether it's single or consolidated
   const renderBookings = groupBookings || (booking ? [{ ...booking, roomNumber: room?.number || '?', roomType: room?.type || '?' }] : []);
 
   let totalRoomRent = 0;
@@ -43,19 +45,27 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
   });
 
   const subTotal = totalRoomRent + totalServiceCharges - totalDiscount;
-  const taxAmount = (subTotal * taxRate) / 100;
-  const netTotal = subTotal + taxAmount;
+  
+  // Logic: Use IGST if state mismatch, otherwise CGST/SGST (simplistic)
+  // Or just show all if rates are set.
+  const isInterState = guest.state && settings.address && !settings.address.includes(guest.state);
+  
+  const cgstAmount = (subTotal * cgstRate) / 100;
+  const sgstAmount = (subTotal * sgstRate) / 100;
+  const igstAmount = (subTotal * igstRate) / 100;
+
+  // Use the sum of applicable taxes
+  const totalTax = isInterState ? igstAmount : (cgstAmount + sgstAmount);
+  const netTotal = subTotal + totalTax;
   const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
   const balance = netTotal - totalPaid;
 
-  // UPI QR Construction
   const upiUrl = `upi://pay?pa=${settings.upiId || ''}&pn=${encodeURIComponent(settings.name)}&am=${balance.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + (booking?.bookingNo || 'GRP-INV'))}`;
   const upiQrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(upiUrl)}`;
 
   return (
     <div className="bg-white p-10 w-[210mm] min-h-[297mm] mx-auto text-[11px] text-gray-800 font-sans leading-tight border border-gray-200 shadow-2xl print:border-none print:shadow-none print:m-0 print:p-6 invoice-sheet">
       
-      {/* Premium Header */}
       <div className="flex justify-between items-start mb-8 border-b-4 border-blue-900 pb-6">
         <div className="flex items-center gap-6">
           {settings.logo ? (
@@ -89,11 +99,10 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
         </div>
       </div>
 
-      {/* Guest Details */}
       <div className="bg-gray-50 border p-5 rounded-2xl mb-8 flex justify-between shadow-sm">
         <div className="space-y-3">
           <InfoItem label="Guest / Billing Entity" value={guest.name} subValue={`${guest.phone} | ${guest.email}`} isPrimary />
-          <InfoItem label="Address" value={guest.address} />
+          <InfoItem label="Address" value={guest.address} subValue={guest.state} />
         </div>
         <div className="text-right space-y-3">
           <InfoItem label="Date of Issue" value={new Date().toLocaleDateString('en-GB')} />
@@ -101,7 +110,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
         </div>
       </div>
 
-      {/* Itemized Table */}
       <div className="border border-gray-200 rounded-2xl overflow-hidden mb-8 shadow-sm">
         <table className="w-full text-left border-collapse">
           <thead className="bg-blue-50/50 border-b border-gray-200 font-black uppercase text-blue-900 text-[9px]">
@@ -132,9 +140,30 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
         </table>
       </div>
 
-      {/* Tax & Totals Section */}
       <div className="grid grid-cols-2 gap-10 mb-8">
         <div className="space-y-4">
+           <div className="bg-gray-50 border p-4 rounded-2xl">
+              <p className="text-[9px] font-black uppercase text-gray-400 mb-2 border-b pb-2">Tax Breakdown</p>
+              <div className="space-y-2 font-bold text-[10px] uppercase">
+                 {isInterState ? (
+                    <div className="flex justify-between">
+                       <span>IGST @ {igstRate}%</span>
+                       <span>₹{igstAmount.toFixed(2)}</span>
+                    </div>
+                 ) : (
+                    <>
+                       <div className="flex justify-between">
+                          <span>CGST @ {cgstRate}%</span>
+                          <span>₹{cgstAmount.toFixed(2)}</span>
+                       </div>
+                       <div className="flex justify-between">
+                          <span>SGST @ {sgstRate}%</span>
+                          <span>₹{sgstAmount.toFixed(2)}</span>
+                       </div>
+                    </>
+                 )}
+              </div>
+           </div>
            <div className="bg-gray-50 border p-4 rounded-2xl">
               <p className="text-[9px] font-black uppercase text-gray-400 mb-2 border-b pb-2">Payment Receipts</p>
               <table className="w-full text-[9px] font-bold">
@@ -157,8 +186,8 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
               <span>₹{subTotal.toFixed(2)}</span>
            </div>
            <div className="flex justify-between items-center text-xs opacity-70 font-black uppercase">
-              <span>GST @ {taxRate}%</span>
-              <span>₹{taxAmount.toFixed(2)}</span>
+              <span>Total Tax Value</span>
+              <span>₹{totalTax.toFixed(2)}</span>
            </div>
            <div className="h-px bg-white/20 my-2"></div>
            <div className="flex justify-between items-end">
@@ -174,7 +203,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
         </div>
       </div>
 
-      {/* Bottom QRs */}
       <div className="grid grid-cols-2 gap-6 p-6 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 mb-10 no-print">
         <div className="flex items-center gap-6">
            <div className="w-24 h-24 bg-white p-2 rounded-2xl shadow-md border flex items-center justify-center">
@@ -191,7 +219,6 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
         </div>
       </div>
 
-      {/* Signature Area */}
       <div className="grid grid-cols-2 gap-32 text-center pt-12">
         <div className="space-y-4">
            <div className="h-16 flex items-end justify-center border-b border-gray-200"></div>

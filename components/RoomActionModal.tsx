@@ -46,7 +46,7 @@ const RoomActionModal: React.FC<RoomActionModalProps> = ({ room, onClose, onChec
             )}
             
             {room.status !== RoomStatus.REPAIR && (
-              <StatusBtn color="bg-[#5c2d0a]" label="Maintenance / Repair" onClick={() => onStatusUpdate(RoomStatus.REPAIR)} />
+              <StatusBtn color="bg-amber-800" label="Maintenance / Repair" onClick={() => onStatusUpdate(RoomStatus.REPAIR)} />
             )}
           </div>
           
