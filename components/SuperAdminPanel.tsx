@@ -15,6 +15,14 @@ const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({ settings, setSettings
   const [activeTab, setActiveTab] = useState<'SECURITY' | 'INVENTORY' | 'FINANCE' | 'SYSTEM'>('SECURITY');
   const [tempSettings, setTempSettings] = useState<HostelSettings>(settings);
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+    }
+  };
+
   const handleUpdate = (field: keyof HostelSettings, value: any) => {
     const updated = { ...tempSettings, [field]: value };
     setTempSettings(updated);
@@ -36,6 +44,13 @@ const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({ settings, setSettings
       {/* Super Header */}
       <header className="bg-black p-8 flex justify-between items-center border-b border-white/10">
         <div className="flex items-center gap-6">
+          <button 
+            onClick={toggleFullscreen}
+            className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center border border-white/20 transition-all shadow-2xl"
+            title="Toggle Fullscreen"
+          >
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+          </button>
           <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-black text-2xl font-black shadow-2xl">SA</div>
           <div>
             <h1 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">Superadmin Command Center</h1>
@@ -71,17 +86,17 @@ const SuperAdminPanel: React.FC<SuperAdminPanelProps> = ({ settings, setSettings
                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-10">Monitor and update all portal access keys</p>
                    
                    <div className="grid grid-cols-2 gap-8">
-                      <PassCard role="Admin Portal" value={tempSettings.adminPassword || 'Durgamaa@18'} onChange={v => handleUpdate('adminPassword', v)} />
-                      <PassCard role="Reception Portal" value={tempSettings.receptionistPassword || 'receptionist'} onChange={v => handleUpdate('receptionistPassword', v)} />
-                      <PassCard role="Accountant Portal" value={tempSettings.accountantPassword || 'accountant'} onChange={v => handleUpdate('accountantPassword', v)} />
-                      <PassCard role="Supervisor Portal" value={tempSettings.supervisorPassword || 'supervisor'} onChange={v => handleUpdate('supervisorPassword', v)} />
+                      <PassCard role="Admin Portal" value={tempSettings.adminPassword || 'admin'} onChange={v => handleUpdate('adminPassword', v)} />
+                      <PassCard role="Reception Portal" value={tempSettings.receptionistPassword || 'admin'} onChange={v => handleUpdate('receptionistPassword', v)} />
+                      <PassCard role="Accountant Portal" value={tempSettings.accountantPassword || 'admin'} onChange={v => handleUpdate('accountantPassword', v)} />
+                      <PassCard role="Supervisor Portal" value={tempSettings.supervisorPassword || 'admin'} onChange={v => handleUpdate('supervisorPassword', v)} />
                    </div>
                 </section>
                 
                 <div className="p-8 bg-blue-900/10 border border-blue-900/30 rounded-[3rem] space-y-4">
-                   <h3 className="font-black text-blue-400 uppercase text-xs tracking-widest">Master Override Warning</h3>
+                   <h3 className="font-black text-blue-400 uppercase text-xs tracking-widest">Master Override Info</h3>
                    <p className="text-xs text-white/70 font-medium leading-relaxed">
-                     The password "Durgamaa@18" is the master hardware key. If you change the Admin Portal password here, it will update the operational login, but the master key remains as a secondary backup for Superadmin recovery.
+                     The system-wide master password is now set to "admin" for all portals as per enterprise policy. Individual staff passwords can be managed in the staff roster under standard Admin settings.
                    </p>
                 </div>
              </div>

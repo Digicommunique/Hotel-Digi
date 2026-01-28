@@ -1,9 +1,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://fejxskvsjfwjqmiobtpp.supabase.co';
-// User provided key: sb_publishable_2uT90ihz2_hKT4ax30ysbA_hZZBiX9P
-const SUPABASE_ANON_KEY = 'sb_publishable_2uT90ihz2_hKT4ax30ysbA_hZZBiX9P';
+// Vercel/Vite environment variables
+const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://fejxskvsjfwjqmiobtpp.supabase.co';
+const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2uT90ihz2_hKT4ax30ysbA_hZZBiX9P';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -13,23 +13,23 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  */
 export async function pushToCloud(tableName: string, data: any) {
   try {
+    if (!data) return true;
+    
+    // Ensure data is an array for batch upsert
+    const payload = Array.isArray(data) ? data : [data];
+    if (payload.length === 0) return true;
+
     const { error } = await supabase
       .from(tableName)
-      .upsert(data, { onConflict: 'id' });
+      .upsert(payload, { onConflict: 'id' });
     
     if (error) {
-      const isSchemaError = error.message.includes('column') || error.message.includes('schema cache');
-      if (isSchemaError) {
-        console.error(`Supabase Schema Mismatch [${tableName}]: The cloud database is missing required columns. 
-        FIX: Go to Settings > Cloud Sync and copy the SQL migration script to your Supabase SQL Editor.`);
-      } else {
-        console.error(`Supabase Sync Error [${tableName}]:`, error.message);
-      }
+      console.error(`[Supabase Sync Error] ${tableName}:`, error.message);
       return false;
     }
     return true;
   } catch (err) {
-    console.error(`Cloud Connection Failed [${tableName}]:`, err);
+    console.error(`[Cloud Connection Failed] ${tableName}:`, err);
     return false;
   }
 }

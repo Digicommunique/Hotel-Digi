@@ -7,21 +7,10 @@ interface ReservationEntryProps {
   onClose: () => void;
   existingGuests: Guest[];
   rooms: Room[];
+  // Fix: Align onSave signature with handleCheckinSave in App.tsx
   onSave: (data: { 
     guest: Partial<Guest>, 
-    roomIds: string[], 
-    bookingNo: string,
-    checkInDate: string,
-    checkInTime: string,
-    checkOutDate: string,
-    checkOutTime: string,
-    purpose: string,
-    mealPlan: string,
-    agent: string,
-    discount: number,
-    advanceAmount: number,
-    advanceMethod: string,
-    secondaryGuest?: any
+    bookings: any[] 
   }) => void;
   settings: HostelSettings;
 }
@@ -76,6 +65,14 @@ const ReservationEntry: React.FC<ReservationEntryProps> = ({ onClose, existingGu
     setBookingNo('RES-' + Date.now().toString().slice(-6));
   }, []);
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+    }
+  };
+
   const handleSearchGuest = () => {
     const found = existingGuests.find(g => g.phone === mobileNo);
     if (found) {
@@ -122,17 +119,51 @@ const ReservationEntry: React.FC<ReservationEntryProps> = ({ onClose, existingGu
 
   const handleSave = () => {
     if (!mobileNo || !guestName || selectedRoomIds.length === 0) return alert("Fill mandatory fields and select a room.");
+    
+    // Fix: Construct bookings array to match App.tsx expectations
+    const initialPayments = parseFloat(advanceAmount) > 0 ? [{
+      id: 'ADV-' + Date.now(),
+      amount: parseFloat(advanceAmount),
+      date: new Date().toISOString(),
+      method: advanceMethod,
+      remarks: 'Advance during reservation'
+    }] : [];
+
+    const sessionGroupId = selectedRoomIds.length > 1 ? 'GRP-' + Math.random().toString(36).substr(2, 6).toUpperCase() : undefined;
+
+    const bookings = selectedRoomIds.map(roomId => {
+      const r = rooms.find(x => x.id === roomId);
+      return {
+        bookingNo: 'RES-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+        roomId: roomId,
+        groupId: sessionGroupId,
+        checkInDate,
+        checkInTime,
+        checkOutDate,
+        checkOutTime,
+        status: 'RESERVED',
+        basePrice: r?.price || 0,
+        discount: parseFloat(discount) || 0,
+        mealPlan,
+        agent: bookingAgent,
+        adults: parseInt(adults),
+        children: parseInt(children),
+        kids: parseInt(kids),
+        others: parseInt(others),
+        charges: [],
+        payments: initialPayments,
+        secondaryGuest: secondaryGuest.name ? secondaryGuest : undefined,
+        purpose: purpose
+      };
+    });
+
     onSave({
       guest: { 
         name: guestName, gender, phone: mobileNo, email, address, city, state, 
         nationality, idNumber, adults: parseInt(adults), children: parseInt(children), 
         kids: parseInt(kids), others: parseInt(others), documents, purposeOfVisit: purpose
       },
-      roomIds: selectedRoomIds,
-      bookingNo, checkInDate, checkInTime, checkOutDate, checkOutTime, purpose, mealPlan,
-      agent: bookingAgent, discount: parseFloat(discount) || 0,
-      advanceAmount: parseFloat(advanceAmount) || 0, advanceMethod,
-      secondaryGuest: secondaryGuest.name ? secondaryGuest : undefined
+      bookings
     });
   };
 
@@ -140,9 +171,18 @@ const ReservationEntry: React.FC<ReservationEntryProps> = ({ onClose, existingGu
     <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-[1400px] h-[95vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 duration-500">
         <div className="bg-[#f59e0b] px-10 py-6 flex justify-between items-center text-white no-print">
-          <div>
-            <h2 className="text-2xl font-black uppercase tracking-tighter">Advanced Reservation Registry</h2>
-            <p className="text-[10px] font-bold text-orange-100 uppercase tracking-widest mt-1">Ref ID: {bookingNo}</p>
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={toggleFullscreen}
+              className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center border border-white/20 transition-all shadow-lg"
+              title="Toggle Fullscreen"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+            </button>
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-tighter">Advanced Reservation Registry</h2>
+              <p className="text-[10px] font-bold text-orange-100 uppercase tracking-widest mt-1">Ref ID: {bookingNo}</p>
+            </div>
           </div>
           <button type="button" onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>

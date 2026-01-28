@@ -97,6 +97,14 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
     setRoomAssignments(assignments);
   }, []);
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+    }
+  };
+
   const stayDuration = useMemo(() => {
     if (!checkInDate || !checkOutDate) return 1;
     const start = new Date(checkInDate);
@@ -198,9 +206,18 @@ const GuestCheckin: React.FC<GuestCheckinProps> = ({
       <div className="bg-[#f8fafc] w-full max-w-7xl rounded-[2.5rem] md:rounded-[3rem] shadow-2xl flex flex-col h-[94vh] overflow-hidden">
         
         <div className="bg-[#003d80] p-6 md:p-8 text-white flex justify-between items-center no-print flex-shrink-0">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight">Resident Registration</h2>
-            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Multi-Checkin & Master Intake Console</p>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={toggleFullscreen}
+              className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center border border-white/20 transition-all shadow-lg"
+              title="Toggle Fullscreen"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+            </button>
+            <div>
+              <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight">Resident Registration</h2>
+              <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Multi-Checkin & Master Intake Console</p>
+            </div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowGRCPreview(true)} className="bg-blue-600 text-white px-4 md:px-6 py-3 rounded-2xl font-black text-[10px] md:text-xs uppercase shadow-xl hover:bg-black transition-all">Print GRC</button>

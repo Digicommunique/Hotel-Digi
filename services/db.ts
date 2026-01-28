@@ -1,6 +1,9 @@
 
 import { Dexie, type Table } from 'dexie';
-import { Room, Guest, Booking, Transaction, RoomShiftLog, CleaningLog, Quotation, HostelSettings, GroupProfile, Supervisor } from '../types';
+import { 
+  Room, Guest, Booking, Transaction, RoomShiftLog, CleaningLog, Quotation, HostelSettings, GroupProfile, Supervisor,
+  BanquetHall, EventBooking, RestaurantOutlet, MenuItem, DiningTable, KOT, InventoryItem, Vendor, FacilityUsage, TravelBooking, StockReceipt, DiningBill, CateringItem
+} from '../types';
 
 export class HotelSphereDB extends Dexie {
   rooms!: Table<Room>;
@@ -13,10 +16,25 @@ export class HotelSphereDB extends Dexie {
   settings!: Table<HostelSettings & { id: string }>;
   groups!: Table<GroupProfile>;
   supervisors!: Table<Supervisor>;
+  
+  // NEW MODULES
+  banquetHalls!: Table<BanquetHall>;
+  eventBookings!: Table<EventBooking>;
+  cateringMenu!: Table<CateringItem>;
+  restaurants!: Table<RestaurantOutlet>;
+  menuItems!: Table<MenuItem>;
+  diningTables!: Table<DiningTable>;
+  kots!: Table<KOT>;
+  diningBills!: Table<DiningBill>;
+  inventory!: Table<InventoryItem>;
+  vendors!: Table<Vendor>;
+  facilityUsage!: Table<FacilityUsage>;
+  travelBookings!: Table<TravelBooking>;
+  stockReceipts!: Table<StockReceipt>;
 
   constructor() {
     super('HotelSphereDB');
-    (this as any).version(3).stores({
+    (this as any).version(6).stores({
       rooms: 'id, number, status, type',
       guests: 'id, name, phone, email',
       bookings: 'id, bookingNo, roomId, guestId, status, checkInDate, checkOutDate, groupBookingId, groupId',
@@ -26,7 +44,22 @@ export class HotelSphereDB extends Dexie {
       quotations: 'id, date, guestName',
       settings: 'id',
       groups: 'id, groupName, headName, status',
-      supervisors: 'id, loginId, name, status'
+      supervisors: 'id, loginId, name, status',
+      
+      // NEW TABLES
+      banquetHalls: 'id, name',
+      eventBookings: 'id, date, hallId, guestId, status',
+      cateringMenu: 'id, name, category',
+      restaurants: 'id, name',
+      menuItems: 'id, name, outletId, category',
+      diningTables: 'id, number, outletId, status',
+      kots: 'id, tableId, outletId, status',
+      diningBills: 'id, billNo, date, guestPhone, roomBookingId',
+      inventory: 'id, name, category',
+      vendors: 'id, name, category',
+      facilityUsage: 'id, facilityId, guestId',
+      travelBookings: 'id, guestId, status, date',
+      stockReceipts: 'id, date, itemId, vendorId'
     });
   }
 }
@@ -34,23 +67,16 @@ export class HotelSphereDB extends Dexie {
 export const db = new HotelSphereDB();
 
 export async function exportDatabase() {
-  const data = {
-    rooms: await db.rooms.toArray(),
-    guests: await db.guests.toArray(),
-    bookings: await db.bookings.toArray(),
-    transactions: await db.transactions.toArray(),
-    shiftLogs: await db.shiftLogs.toArray(),
-    cleaningLogs: await db.cleaningLogs.toArray(),
-    quotations: await db.quotations.toArray(),
-    settings: await db.settings.toArray(),
-    groups: await db.groups.toArray(),
-    supervisors: await db.supervisors.toArray()
-  };
+  const tables = ['rooms', 'guests', 'bookings', 'transactions', 'settings', 'groups', 'supervisors', 'banquetHalls', 'eventBookings', 'cateringMenu', 'restaurants', 'menuItems', 'diningTables', 'kots', 'diningBills', 'inventory', 'vendors', 'facilityUsage', 'travelBookings', 'stockReceipts'];
+  const data: any = {};
+  for (const t of tables) {
+    data[t] = await (db as any)[t].toArray();
+  }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `hotelsphere_backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `hotelsphere_pro_full_backup_${new Date().toISOString().split('T')[0]}.json`;
   a.click();
 }
 
@@ -60,17 +86,14 @@ export async function importDatabase(jsonFile: File) {
     reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        await (db as any).transaction('rw', [db.rooms, db.guests, db.bookings, db.transactions, db.shiftLogs, db.cleaningLogs, db.quotations, db.settings, db.groups, db.supervisors], async () => {
-          if (data.rooms) { await db.rooms.clear(); await db.rooms.bulkAdd(data.rooms); }
-          if (data.guests) { await db.guests.clear(); await db.guests.bulkAdd(data.guests); }
-          if (data.bookings) { await db.bookings.clear(); await db.bookings.bulkAdd(data.bookings); }
-          if (data.transactions) { await db.transactions.clear(); await db.transactions.bulkAdd(data.transactions); }
-          if (data.shiftLogs) { await db.shiftLogs.clear(); await db.shiftLogs.bulkAdd(data.shiftLogs); }
-          if (data.cleaningLogs) { await db.cleaningLogs.clear(); await db.cleaningLogs.bulkAdd(data.cleaningLogs); }
-          if (data.quotations) { await db.quotations.clear(); await db.quotations.bulkAdd(data.quotations); }
-          if (data.settings) { await db.settings.clear(); await db.settings.bulkAdd(data.settings); }
-          if (data.groups) { await db.groups.clear(); await db.groups.bulkAdd(data.groups); }
-          if (data.supervisors) { await db.supervisors.clear(); await db.supervisors.bulkAdd(data.supervisors); }
+        const tables = Object.keys(data);
+        await (db as any).transaction('rw', tables.map(t => (db as any)[t]), async () => {
+          for (const t of tables) {
+            if ((db as any)[t]) {
+              await (db as any)[t].clear();
+              await (db as any)[t].bulkAdd(data[t]);
+            }
+          }
         });
         resolve(true);
       } catch (err) {

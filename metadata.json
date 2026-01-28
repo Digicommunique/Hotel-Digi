@@ -1,6 +1,6 @@
 {
-  "name": "HotelSphere 2.1",
-  "description": "A comprehensive hostel management system featuring real-time room status, group bookings, document uploads, and integrated billing.",
+  "name": "Hotel Sphere Pro by Digital Communique",
+  "description": "Enterprise-grade hostel management system with Banquets, Dining (POS/KOT), Inventory, Facilities, and Travel integration.",
   "requestFramePermissions": [
     "camera"
   ]

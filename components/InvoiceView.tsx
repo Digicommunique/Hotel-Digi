@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Guest, Booking, Room, HostelSettings, Payment } from '../types';
+import { Guest, Booking, Room, HostelSettings, Payment, Charge } from '../types';
 
 interface InvoiceViewProps {
   guest: Guest;
@@ -12,51 +12,50 @@ interface InvoiceViewProps {
 }
 
 const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings, room, settings, payments }) => {
-  // Use explicit GST rates from settings
-  const cgstRate = settings.cgstRate || 0;
-  const sgstRate = settings.sgstRate || 0;
-  const igstRate = settings.igstRate || 0;
+  const cgstRate = settings.cgstRate || (settings.taxRate ? settings.taxRate / 2 : 0);
+  const sgstRate = settings.sgstRate || (settings.taxRate ? settings.taxRate / 2 : 0);
+  const igstRate = settings.igstRate || (settings.taxRate || 0);
 
   const renderBookings = groupBookings || (booking ? [{ ...booking, roomNumber: room?.number || '?', roomType: room?.type || '?' }] : []);
 
   let totalRoomRent = 0;
   let totalServiceCharges = 0;
   let totalDiscount = 0;
-  let nightsTotal = 0;
+  
+  // Aggregate all charges from all linked bookings
+  const allCharges: (Charge & { roomNo?: string })[] = [];
 
   const lineItems = renderBookings.map(b => {
     const start = new Date(b.checkInDate);
     const end = new Date(b.checkOutDate);
     const nights = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)));
     const rent = (b.basePrice || 0) * nights;
-    const services = (b.charges || []).reduce((acc, c) => acc + c.amount, 0);
     
     totalRoomRent += rent;
-    totalServiceCharges += services;
     totalDiscount += (b.discount || 0);
-    nightsTotal += nights;
 
-    return {
-      ...b,
-      nights,
-      rent,
-      services
-    };
+    // Collect charges for breakdown
+    if (b.charges) {
+      b.charges.forEach(c => {
+        allCharges.push({ ...c, roomNo: b.roomNumber });
+        totalServiceCharges += c.amount;
+      });
+    }
+
+    return { ...b, nights, rent };
   });
 
-  const subTotal = totalRoomRent + totalServiceCharges - totalDiscount;
+  const grossTotal = totalRoomRent + totalServiceCharges;
+  const taxableAmount = grossTotal - totalDiscount;
   
-  // Logic: Use IGST if state mismatch, otherwise CGST/SGST (simplistic)
-  // Or just show all if rates are set.
   const isInterState = guest.state && settings.address && !settings.address.includes(guest.state);
   
-  const cgstAmount = (subTotal * cgstRate) / 100;
-  const sgstAmount = (subTotal * sgstRate) / 100;
-  const igstAmount = (subTotal * igstRate) / 100;
+  const cgstAmount = (taxableAmount * cgstRate) / 100;
+  const sgstAmount = (taxableAmount * sgstRate) / 100;
+  const igstAmount = (taxableAmount * igstRate) / 100;
 
-  // Use the sum of applicable taxes
   const totalTax = isInterState ? igstAmount : (cgstAmount + sgstAmount);
-  const netTotal = subTotal + totalTax;
+  const netTotal = taxableAmount + totalTax;
   const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
   const balance = netTotal - totalPaid;
 
@@ -110,16 +109,15 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded-2xl overflow-hidden mb-8 shadow-sm">
+      {/* Main Stay Description Table */}
+      <div className="border border-gray-200 rounded-2xl overflow-hidden mb-6 shadow-sm">
         <table className="w-full text-left border-collapse">
           <thead className="bg-blue-50/50 border-b border-gray-200 font-black uppercase text-blue-900 text-[9px]">
             <tr>
-              <th className="p-4">Stay Description</th>
+              <th className="p-4">Room/Stay Description</th>
               <th className="p-4 text-center">Nights</th>
-              <th className="p-4 text-right">Tariff (₹)</th>
-              <th className="p-4 text-right">Rent Total (₹)</th>
-              <th className="p-4 text-right">Services (₹)</th>
-              <th className="p-4 text-right">Net Value (₹)</th>
+              <th className="p-4 text-right">Daily Rate</th>
+              <th className="p-4 text-right">Total Rent (₹)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 font-bold uppercase">
@@ -132,13 +130,41 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
                 <td className="p-4 text-center">{item.nights}</td>
                 <td className="p-4 text-right">₹{item.basePrice.toFixed(2)}</td>
                 <td className="p-4 text-right">₹{item.rent.toFixed(2)}</td>
-                <td className="p-4 text-right">₹{item.services.toFixed(2)}</td>
-                <td className="p-4 text-right">₹{(item.rent + item.services - (item.discount || 0)).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Detailed Services Breakdown Table */}
+      {allCharges.length > 0 && (
+        <div className="border border-gray-200 rounded-2xl overflow-hidden mb-8 shadow-sm">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 border-b border-gray-200 font-black uppercase text-slate-500 text-[9px]">
+              <tr>
+                <th className="p-4">Modular Services (Dining/Transport/Facilities/Banquet)</th>
+                <th className="p-4">Date</th>
+                {groupBookings && <th className="p-4">Unit</th>}
+                <th className="p-4 text-right">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 font-bold uppercase text-gray-600">
+              {allCharges.map((charge, idx) => (
+                <tr key={idx} className="bg-white">
+                  <td className="p-4 truncate max-w-xs">{charge.description}</td>
+                  <td className="p-4">{charge.date.split('T')[0]}</td>
+                  {groupBookings && <td className="p-4">{charge.roomNo}</td>}
+                  <td className="p-4 text-right">₹{charge.amount.toFixed(2)}</td>
+                </tr>
+              ))}
+              <tr className="bg-slate-50/50 font-black">
+                <td colSpan={groupBookings ? 3 : 2} className="p-4 text-right uppercase text-[9px] text-slate-400">Total Service Charges</td>
+                <td className="p-4 text-right text-blue-900">₹{totalServiceCharges.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-10 mb-8">
         <div className="space-y-4">
@@ -180,24 +206,38 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ guest, booking, groupBookings
            </div>
         </div>
         
-        <div className="bg-blue-900 rounded-[2rem] p-8 text-white space-y-4 shadow-xl">
-           <div className="flex justify-between items-center text-xs opacity-70 font-black uppercase">
-              <span>Gross Subtotal</span>
-              <span>₹{subTotal.toFixed(2)}</span>
+        <div className="bg-blue-900 rounded-[2rem] p-8 text-white space-y-3 shadow-xl">
+           <div className="flex justify-between items-center text-[10px] opacity-60 font-black uppercase">
+              <span>Gross Bill Value</span>
+              <span>₹{grossTotal.toFixed(2)}</span>
            </div>
-           <div className="flex justify-between items-center text-xs opacity-70 font-black uppercase">
-              <span>Total Tax Value</span>
+           
+           {totalDiscount > 0 && (
+             <div className="flex justify-between items-center text-[10px] font-black uppercase text-orange-400">
+                <span>(-) Total Discount Given</span>
+                <span>- ₹{totalDiscount.toFixed(2)}</span>
+             </div>
+           )}
+
+           <div className="flex justify-between items-center text-[10px] font-black uppercase text-white/80 border-t border-white/10 pt-2">
+              <span>Net Taxable Amount</span>
+              <span>₹{taxableAmount.toFixed(2)}</span>
+           </div>
+
+           <div className="flex justify-between items-center text-[10px] opacity-60 font-black uppercase">
+              <span>Total Tax (GST)</span>
               <span>₹{totalTax.toFixed(2)}</span>
            </div>
-           <div className="h-px bg-white/20 my-2"></div>
-           <div className="flex justify-between items-end">
+
+           <div className="h-px bg-white/20 my-1"></div>
+           <div className="flex justify-between items-end pt-1">
               <div>
-                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Total Bill Amount</p>
+                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Grand Total</p>
                  <p className="text-3xl font-black tracking-tighter">₹{netTotal.toFixed(2)}</p>
               </div>
               <div className="text-right">
-                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Balance Due</p>
-                 <p className="text-xl font-black text-red-400 tracking-tighter">₹{balance.toFixed(2)}</p>
+                 <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Balance</p>
+                 <p className={`text-xl font-black ${balance > 0 ? 'text-red-400' : 'text-green-400'} tracking-tighter`}>₹{balance.toFixed(2)}</p>
               </div>
            </div>
         </div>

@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { HostelSettings, Room, AgentConfig, RoomStatus } from '../types';
-import { exportDatabase, importDatabase } from '../services/db';
+/* Fixed relative import path and added AgentConfig to types.ts */
+import { HostelSettings, Room, AgentConfig, RoomStatus } from './types';
+import { exportDatabase, importDatabase } from './services/db';
 
 interface SettingsProps {
   settings: HostelSettings;
