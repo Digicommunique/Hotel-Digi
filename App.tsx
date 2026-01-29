@@ -1,8 +1,8 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Room, RoomStatus, Guest, Booking, HostelSettings, Transaction, GroupProfile, UserRole, Supervisor, Quotation } from './types.ts';
 import { INITIAL_ROOMS, STATUS_COLORS } from './constants.tsx';
-import { db, exportDatabase, importDatabase } from './services/db.ts';
+import { db, exportDatabase } from './services/db.ts';
 import GuestCheckin from './components/GuestCheckin.tsx';
 import StayManagement from './components/StayManagement.tsx';
 import Reports from './components/Reports.tsx';
@@ -31,12 +31,11 @@ const GUEST_THEMES = [
 
 const getGuestTheme = (name: string) => {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return GUEST_THEMES[Math.abs(hash) % GUEST_THEMES.length];
 };
 
 type AppTab = 'DASHBOARD' | 'BANQUET' | 'DINING' | 'FACILITY' | 'TRAVEL' | 'GROUP' | 'INVENTORY' | 'ACCOUNTING' | 'REPORTS' | 'SETTINGS';
-type ViewMode = 'FULL' | 'DESKTOP' | 'TABLET' | 'MOBILE';
 
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -46,6 +45,7 @@ const App: React.FC = () => {
   const [groups, setGroups] = useState<GroupProfile[]>([]);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [statusFilter, setStatusFilter] = useState<RoomStatus | 'ALL'>('ALL');
   
   const [settings, setSettings] = useState<HostelSettings>({
     name: 'Hotel Sphere Pro',
@@ -59,7 +59,6 @@ const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('RECEPTIONIST');
   const [activeTab, setActiveTab] = useState<AppTab>('DASHBOARD');
-  const [viewMode, setViewMode] = useState<ViewMode>('FULL');
   
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
@@ -68,7 +67,6 @@ const App: React.FC = () => {
   const [showRoomActions, setShowRoomActions] = useState(false);
   const [showGlobalArchive, setShowGlobalArchive] = useState(false);
   
-  // Selection Mode State
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
 
@@ -107,16 +105,12 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  const handleLogin = (role: UserRole) => {
+  const handleLogin = (role: UserRole, supervisor?: Supervisor) => {
     setCurrentUserRole(role);
     setIsLoggedIn(true);
     if (role === 'CHEF' || role === 'WAITER') setActiveTab('DINING');
     else if (role === 'ACCOUNTANT') setActiveTab('ACCOUNTING');
     else setActiveTab('DASHBOARD');
-  };
-
-  const handleUpdateBooking = (updated: Booking) => {
-    setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
   };
 
   const toggleFullscreen = () => {
@@ -146,13 +140,14 @@ const App: React.FC = () => {
   }, [currentUserRole]);
 
   const roomsByFloor = useMemo(() => {
-    return rooms.reduce((acc, room) => {
+    const filtered = statusFilter === 'ALL' ? rooms : rooms.filter(r => r.status === statusFilter);
+    return filtered.reduce((acc, room) => {
       const floorKey = room.floor.toString();
       if (!acc[floorKey]) acc[floorKey] = [];
       acc[floorKey].push(room);
       return acc;
     }, {} as Record<string, Room[]>);
-  }, [rooms]);
+  }, [rooms, statusFilter]);
 
   const toggleRoomSelection = (roomId: string) => {
     const newSet = new Set(selectedRoomIds);
@@ -169,30 +164,24 @@ const App: React.FC = () => {
       const updatedBooking = { ...booking, roomId: newRoomId };
       await db.bookings.put(updatedBooking);
 
-      const oldRoom = rooms.find(r => r.id === oldRoomId);
-      const newRoom = rooms.find(r => r.id === newRoomId);
-
-      if (oldRoom && newRoom) {
-        const updatedRooms = rooms.map(r => {
-          if (r.id === oldRoomId) return { ...r, status: RoomStatus.DIRTY, currentBookingId: undefined };
-          if (r.id === newRoomId) return { ...r, status: RoomStatus.OCCUPIED, currentBookingId: bookingId };
-          return r;
-        });
-        await db.rooms.bulkPut(updatedRooms);
-        setRooms(updatedRooms);
-      }
-
+      const updatedRooms = rooms.map(r => {
+        if (r.id === oldRoomId) return { ...r, status: RoomStatus.DIRTY, currentBookingId: undefined };
+        if (r.id === newRoomId) return { ...r, status: RoomStatus.OCCUPIED, currentBookingId: bookingId };
+        return r;
+      });
+      await db.rooms.bulkPut(updatedRooms);
+      setRooms(updatedRooms);
       setBookings(bookings.map(b => b.id === bookingId ? updatedBooking : b));
-      alert(`Room shifted successfully to ${newRoom?.number}`);
+      alert(`Room shifted successfully.`);
     } catch (err) {
-      alert("Shift failed. Check database.");
+      alert("Shift failed.");
     }
   };
 
   const renderContent = () => {
     if (activeBookingId) {
       const b = bookings.find(x => x.id === activeBookingId)!;
-      const g = guests.find(x => x.id === b.guestId)!;
+      const g = guests.find(x => x.id === b.guestId) || { name: 'Unknown Guest', phone: '' } as Guest;
       const r = rooms.find(x => x.id === b.roomId)!;
       return <StayManagement booking={b} guest={g} room={r} allRooms={rooms} allBookings={bookings} settings={settings} 
         onUpdate={async (bu) => { 
@@ -246,10 +235,10 @@ const App: React.FC = () => {
     }
 
     switch (activeTab) {
-      case 'BANQUET': return <BanquetModule settings={settings} guests={guests} rooms={rooms} roomBookings={bookings} onUpdateBooking={handleUpdateBooking} />;
-      case 'DINING': return <DiningModule rooms={rooms} bookings={bookings} guests={guests} settings={settings} userRole={currentUserRole} onUpdateBooking={handleUpdateBooking} />;
-      case 'FACILITY': return <FacilityModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={handleUpdateBooking} />;
-      case 'TRAVEL': return <TravelModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={handleUpdateBooking} />;
+      case 'BANQUET': return <BanquetModule settings={settings} guests={guests} rooms={rooms} roomBookings={bookings} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
+      case 'DINING': return <DiningModule rooms={rooms} bookings={bookings} guests={guests} settings={settings} userRole={currentUserRole} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
+      case 'FACILITY': return <FacilityModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
+      case 'TRAVEL': return <TravelModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
       case 'GROUP': return <GroupModule groups={groups} setGroups={async (gs) => { setGroups(gs); await db.groups.bulkPut(gs); }} rooms={rooms} bookings={bookings} setBookings={setBookings} guests={guests} setGuests={setGuests} setRooms={setRooms} onAddTransaction={(tx) => { setTransactions([...transactions, tx]); db.transactions.put(tx); }} onGroupPayment={() => {}} settings={settings} />;
       case 'INVENTORY': return <InventoryModule settings={settings} />;
       case 'ACCOUNTING': return <Accounting transactions={transactions} setTransactions={async (txs) => { setTransactions(txs); await db.transactions.bulkPut(txs); }} guests={guests} bookings={bookings} quotations={quotations} setQuotations={async (qs) => { setQuotations(qs); await db.quotations.bulkPut(qs); }} settings={settings} rooms={rooms} />;
@@ -257,7 +246,7 @@ const App: React.FC = () => {
       case 'SETTINGS': return <Settings settings={settings} setSettings={async (s)=>{await db.settings.put({...s, id:'primary'}); setSettings(s);}} rooms={rooms} setRooms={async (rs)=>{setRooms(rs); await db.rooms.bulkPut(rs);}} supervisors={supervisors} setSupervisors={async (sups) => { setSupervisors(sups); await db.supervisors.bulkPut(sups); }} />;
       default:
         return (
-          <div className="p-4 md:p-8 pb-40 relative">
+          <div className="p-4 md:p-8 pb-40 relative animate-in fade-in duration-700">
             <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 bg-white p-8 rounded-[2.5rem] border shadow-xl">
                <div className="flex flex-col gap-1">
                  <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Property Status</h1>
@@ -269,8 +258,8 @@ const App: React.FC = () => {
                     ENTER FULLSCREEN
                   </button>
                   <div className="flex gap-4 flex-wrap justify-center">
-                    <button onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedRoomIds(new Set()); }} className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase shadow-lg transition-all border-2 ${isSelectionMode ? 'bg-orange-50 border-orange-500 text-white animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-200'}`}>
-                      {isSelectionMode ? 'Click Rooms to Select (Cancel)' : 'Multi Check-in Selection'}
+                    <button onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedRoomIds(new Set()); }} className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase shadow-lg transition-all border-2 ${isSelectionMode ? 'bg-orange-600 border-orange-600 text-white animate-pulse' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-200'}`}>
+                      {isSelectionMode ? 'CANCEL SELECTION' : 'START MULTI-CHECKIN'}
                     </button>
                     <button onClick={() => setShowReservationForm(true)} className="bg-blue-900 text-white px-10 py-4 rounded-2xl font-black text-[11px] uppercase shadow-2xl hover:bg-black transition-all">+ Book Reservation</button>
                   </div>
@@ -288,7 +277,7 @@ const App: React.FC = () => {
                     const today = new Date().toISOString().split('T')[0];
                     const activeB = bookings.find(b => b.roomId === room.id && b.status === 'ACTIVE');
                     const reservedToday = bookings.find(b => b.roomId === room.id && b.status === 'RESERVED' && b.checkInDate === today);
-                    const guestObj = activeB || reservedToday ? guests.find(g => g.id === (activeB || reservedToday)!.guestId) : null;
+                    const guestObj = (activeB || reservedToday) ? guests.find(g => g.id === (activeB || reservedToday)!.guestId) : null;
                     const effectiveStatus = activeB ? RoomStatus.OCCUPIED : reservedToday ? RoomStatus.RESERVED : room.status;
                     const theme = guestObj ? getGuestTheme(guestObj.name) : null;
                     const isSelected = selectedRoomIds.has(room.id);
@@ -321,53 +310,64 @@ const App: React.FC = () => {
                 </div>
               </div>
             ))}
+            
+            {isSelectionMode && selectedRoomIds.size > 0 && (
+              <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-10">
+                <button 
+                  onClick={() => setShowCheckinForm(true)}
+                  className="bg-emerald-600 text-white px-12 py-6 rounded-full font-black uppercase text-sm shadow-[0_20px_50px_rgba(5,150,105,0.4)] flex items-center gap-4 hover:scale-110 active:scale-95 transition-all"
+                >
+                  <span className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">{selectedRoomIds.size}</span>
+                  Check-in Selected Rooms
+                </button>
+              </div>
+            )}
           </div>
         );
     }
   };
 
-  const containerWidthClass = { 'FULL': 'w-full', 'DESKTOP': 'max-w-[1440px] mx-auto shadow-2xl', 'TABLET': 'max-w-[800px] mx-auto shadow-2xl', 'MOBILE': 'max-w-[420px] mx-auto shadow-2xl' }[viewMode];
-
   if (isLoading) return <div className="min-h-screen bg-[#001a33] flex flex-col items-center justify-center text-white gap-4">
     <div className="w-16 h-16 bg-blue-700 rounded-3xl animate-bounce flex items-center justify-center text-2xl font-black shadow-[0_0_50px_rgba(29,78,216,0.5)]">HS</div>
-    <p className="font-black uppercase tracking-[0.5em] text-xs opacity-50">Initializing Pro Core...</p>
+    <p className="font-black uppercase tracking-[0.5em] text-xs opacity-50">Initializing Core...</p>
   </div>;
 
   if (!isLoggedIn) return <Login onLogin={handleLogin} settings={settings} supervisors={supervisors} />;
 
   return (
-    <div className={`min-h-screen flex flex-col bg-[#001a33] transition-all duration-500 overflow-x-hidden ${viewMode !== 'FULL' ? 'py-8' : ''}`}>
-      <div className={`flex flex-col bg-white flex-1 overflow-hidden transition-all duration-500 ${containerWidthClass} ${viewMode !== 'FULL' ? 'rounded-[4rem] border-8 border-slate-900 shadow-2xl' : ''}`}>
-        <nav className="bg-[#001a33] text-white px-8 py-5 flex items-center justify-between shadow-2xl sticky top-0 z-50 no-print border-b border-white/10">
-          <div className="flex items-center gap-6 shrink-0">
-            <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setActiveTab('DASHBOARD')}>
-              <div className="w-12 h-12 bg-blue-700 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg">HS</div>
-              <div className="hidden lg:block">
-                <span className="text-2xl font-black tracking-tighter uppercase block leading-none">Hotel Sphere Pro</span>
-                <span className="text-[8px] font-black uppercase text-blue-400 tracking-[0.4em]">Enterprise Edition</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {navItems.map(item => (
-                <NavBtn key={item.tab} label={item.label} active={activeTab === item.tab} onClick={() => setActiveTab(item.tab)} />
-              ))}
+    <div className="min-h-screen flex flex-col bg-[#001a33] transition-all duration-500">
+      <nav className="bg-[#001a33] text-white px-8 py-5 flex items-center justify-between shadow-2xl sticky top-0 z-50 no-print border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-6 shrink-0">
+          <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setActiveTab('DASHBOARD')}>
+            <div className="w-12 h-12 bg-blue-700 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg">HS</div>
+            <div className="hidden lg:block">
+              <span className="text-2xl font-black tracking-tighter uppercase block leading-none">Hotel Sphere Pro</span>
+              <span className="text-[8px] font-black uppercase text-blue-400 tracking-[0.4em]">Enterprise Edition</span>
             </div>
           </div>
-          <button onClick={() => setIsLoggedIn(false)} className="text-[10px] font-black uppercase bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl ml-2">EXIT</button>
-        </nav>
-
-        <main className="flex-1 overflow-y-auto custom-scrollbar no-print bg-[#f8f9fa]">{renderContent()}</main>
-
-        <footer className="bg-white border-t px-8 py-5 flex flex-col md:flex-row justify-between items-center z-40 shadow-2xl no-print shrink-0">
-          <div className="flex gap-8 items-center">
-            <Stat label="Vacant" count={rooms.filter(r=>r.status===RoomStatus.VACANT).length} color="text-emerald-600" />
-            <Stat label="Occupied" count={rooms.filter(r=>r.status===RoomStatus.OCCUPIED).length} color="text-blue-700" />
-            <Stat label="Laundry" count={rooms.filter(r=>r.status===RoomStatus.DIRTY).length} color="text-rose-600" />
-            <FooterBtn label="Search Duplicate Bill" onClick={() => setShowGlobalArchive(true)} icon="📄" />
-            <FooterBtn label="Sync Backup" onClick={exportDatabase} icon="☁️" />
+          <div className="flex gap-2">
+            {navItems.map(item => (
+              <NavBtn key={item.tab} label={item.label} active={activeTab === item.tab} onClick={() => setActiveTab(item.tab)} />
+            ))}
           </div>
-        </footer>
-      </div>
+        </div>
+        <button onClick={() => setIsLoggedIn(false)} className="text-[10px] font-black uppercase bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl ml-2">EXIT</button>
+      </nav>
+
+      <main className="flex-1 overflow-y-auto custom-scrollbar no-print bg-[#f8f9fa]">{renderContent()}</main>
+
+      <footer className="bg-white border-t px-8 py-5 flex flex-col md:flex-row justify-between items-center z-40 shadow-2xl no-print shrink-0">
+        <div className="flex gap-6 md:gap-8 items-center flex-wrap">
+          <Stat label="Total" count={rooms.length} color="text-slate-400" onClick={() => setStatusFilter('ALL')} active={statusFilter === 'ALL'} />
+          <Stat label="Vacant" count={rooms.filter(r=>r.status===RoomStatus.VACANT).length} color="text-emerald-600" onClick={() => setStatusFilter(RoomStatus.VACANT)} active={statusFilter === RoomStatus.VACANT} />
+          <Stat label="Occupied" count={rooms.filter(r=>r.status===RoomStatus.OCCUPIED).length} color="text-blue-700" onClick={() => setStatusFilter(RoomStatus.OCCUPIED)} active={statusFilter === RoomStatus.OCCUPIED} />
+          <Stat label="Laundry" count={rooms.filter(r=>r.status===RoomStatus.DIRTY).length} color="text-rose-600" onClick={() => setStatusFilter(RoomStatus.DIRTY)} active={statusFilter === RoomStatus.DIRTY} />
+          <Stat label="Repair" count={rooms.filter(r=>r.status===RoomStatus.REPAIR).length} color="text-amber-800" onClick={() => setStatusFilter(RoomStatus.REPAIR)} active={statusFilter === RoomStatus.REPAIR} />
+          <div className="h-8 w-px bg-slate-100 hidden md:block mx-2"></div>
+          <FooterBtn label="Bill Archive" onClick={() => setShowGlobalArchive(true)} icon="📄" />
+          <FooterBtn label="Backup" onClick={exportDatabase} icon="☁️" />
+        </div>
+      </footer>
 
       {showRoomActions && selectedRoom && (
         <RoomActionModal room={selectedRoom} onClose={() => setShowRoomActions(false)} onCheckIn={() => { setShowRoomActions(false); setShowCheckinForm(true); }} 
@@ -403,15 +403,15 @@ const NavBtn: React.FC<{ label: string, active: boolean, onClick: () => void }> 
   <button onClick={onClick} className={`px-5 py-2.5 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest shrink-0 ${active ? 'bg-blue-700 text-white shadow-xl' : 'text-white/50 hover:text-white'}`}>{label}</button>
 );
 
-const Stat: React.FC<{ label: string, count: number, color: string }> = ({ label, count, color }) => (
-  <div className="flex items-center gap-3 shrink-0">
-    <span className="text-[10px] font-black uppercase text-slate-400 tracking-tight">{label}</span>
+const Stat: React.FC<{ label: string, count: number, color: string, onClick: () => void, active: boolean }> = ({ label, count, color, onClick, active }) => (
+  <button onClick={onClick} className={`flex items-center gap-3 shrink-0 p-2 rounded-xl transition-all ${active ? 'bg-slate-50 ring-2 ring-slate-100' : 'hover:bg-slate-50'}`}>
+    <span className="text-[9px] font-black uppercase text-slate-400 tracking-tight">{label}</span>
     <span className={`text-2xl font-black ${color} tracking-tighter`}>{count}</span>
-  </div>
+  </button>
 );
 
 const FooterBtn = ({ label, onClick, icon }: any) => (
-  <button onClick={onClick} className="flex items-center gap-2.5 px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all bg-slate-50 text-slate-600 hover:bg-blue-700 hover:text-white border">
+  <button onClick={onClick} className="flex items-center gap-2.5 px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all bg-slate-50 text-slate-600 hover:bg-blue-700 hover:text-white border shadow-sm">
     <span>{icon}</span>{label}
   </button>
 );

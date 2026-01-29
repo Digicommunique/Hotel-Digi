@@ -19,7 +19,6 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
   const [showForm, setShowForm] = useState(false);
   const [selectedHall, setSelectedHall] = useState<BanquetHall | null>(null);
   const [activeBooking, setActiveBooking] = useState<EventBooking | null>(null);
-  const [showPrepReport, setShowPrepReport] = useState(false);
   const [showProjectionConsole, setShowProjectionConsole] = useState(false);
 
   // Settlement Linkage
@@ -76,7 +75,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
 
   const handleSaveVenue = async () => {
     if (!newVenue.name) return;
-    const v: BanquetHall = { ...newVenue, id: `VEN-${Date.now()}` } as BanquetHall;
+    const v: BanquetHall = { ...newVenue, id: `VEN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` } as BanquetHall;
     await db.banquetHalls.put(v);
     setHalls([...halls, v]);
     setNewVenue({ name: '', capacity: 100, basePrice: 15000, type: 'HALL' });
@@ -86,12 +85,19 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
     if (!editingFoodItem?.name || !editingFoodItem?.pricePerPlate) return;
     const f: CateringItem = { 
       ...editingFoodItem, 
-      id: editingFoodItem.id || `FOOD-${Date.now()}` 
+      id: editingFoodItem.id || `FOOD-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` 
     } as CateringItem;
     await db.cateringMenu.put(f);
     setCateringMenu(await db.cateringMenu.toArray());
     setEditingFoodItem(null);
-    alert("Recipe Updated Successfully.");
+    alert("Menu Recipe Updated.");
+  };
+
+  // Added deleteCateringItem function to fix reference error
+  const deleteCateringItem = async (id: string) => {
+    if (!confirm("Permanently delete this food item?")) return;
+    await db.cateringMenu.delete(id);
+    setCateringMenu(cateringMenu.filter(m => m.id !== id));
   };
 
   const handleSaveBooking = async () => {
@@ -103,7 +109,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
 
     const b: EventBooking = {
       ...formData,
-      id: formData.id || `EVT-${Date.now()}`,
+      id: formData.id || `EVT-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       hallId: formData.hallId || selectedHall!.id,
       totalAmount: finalTotal,
       catering: {
@@ -119,7 +125,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
     setSelectedHall(null);
     setSelectedFoodIds([]);
     setFormData({ guestName: '', guestPhone: '', eventName: '', eventType: 'Corporate', date: new Date().toISOString().split('T')[0], startTime: '10:00', endTime: '18:00', totalAmount: 0, advancePaid: 0, discount: 0, paymentMode: 'Cash', status: 'TENTATIVE', guestCount: 100 });
-    alert(formData.id ? "Event Plan Updated." : "New Event Plan Authorized.");
+    alert(formData.id ? "Event Plan Updated." : "Event Authorized.");
   };
 
   const handleEditExistingBooking = (b: EventBooking) => {
@@ -170,12 +176,6 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
     alert("Event Folio Settle Complete.");
   };
 
-  const deleteCateringItem = async (id: string) => {
-    if (!confirm("Permanently remove this food item from registry?")) return;
-    await db.cateringMenu.delete(id);
-    setCateringMenu(cateringMenu.filter(c => c.id !== id));
-  };
-
   const activeResidents = useMemo(() => {
     const active = roomBookings.filter(b => b.status === 'ACTIVE');
     if (!roomSearch) return active;
@@ -190,7 +190,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
     if (!editingFoodItem?.ingredients) return [];
     return editingFoodItem.ingredients.map(ing => ({
       name: ing.name,
-      totalQty: ing.qtyPerPlate * projectionCount,
+      totalQty: (ing.qtyPerPlate || 0) * projectionCount,
       unit: ing.unit
     }));
   }, [editingFoodItem, projectionCount]);
@@ -202,7 +202,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
   });
 
   return (
-    <div className="p-8 h-full flex flex-col gap-8 bg-[#f8fafc]">
+    <div className="p-8 h-full flex flex-col gap-8 bg-[#f8fafc] animate-in fade-in duration-700">
       <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border">
         <div>
           <h2 className="text-3xl font-black text-blue-900 uppercase tracking-tighter leading-none">Venues & Banquets</h2>
@@ -230,7 +230,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                           ))}
                        </tr>
                     </thead>
-                    <tbody className="text-[11px] font-bold text-slate-700 uppercase">
+                    <tbody className="text-[11px] font-bold text-slate-700 uppercase bg-white">
                        {halls.map(hall => (
                           <tr key={hall.id} className="border-b h-32 hover:bg-slate-50 transition-colors">
                              <td className="p-6 bg-white sticky left-0 z-10 border-r shadow-sm font-black text-blue-900 leading-tight">
@@ -278,7 +278,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
               </div>
               <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pr-2 pb-10">
                  {halls.map(h => (
-                    <div key={h.id} className="bg-white border-2 border-slate-50 p-8 rounded-[2.5rem] shadow-sm flex flex-col justify-between hover:border-blue-600 transition-all group">
+                    <div key={h.id} className="bg-white border-2 border-slate-50 p-8 rounded-[2.5rem] shadow-sm flex flex-col justify-between hover:border-blue-600 transition-all group text-slate-900">
                        <div className="flex justify-between items-start">
                           <h4 className="text-xl font-black text-blue-900 uppercase leading-tight">{h.name}</h4>
                           <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">{h.type}</span>
@@ -298,17 +298,17 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                     <h2 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Food Production Registry</h2>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Manage Menu Items, Costs & Preparations</p>
                  </div>
-                 <button onClick={() => { setEditingFoodItem({ name: '', category: 'Lunch', pricePerPlate: 0, ingredients: [] }); setProjectionCount(100); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-black transition-all">+ Add To Menu Box</button>
+                 <button onClick={() => { setEditingFoodItem({ name: '', category: 'Lunch', pricePerPlate: 0, ingredients: [] }); }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-black transition-all">+ Add To Menu Box</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 overflow-y-auto custom-scrollbar flex-1 pr-2 pb-10">
                  {cateringMenu.map(f => (
-                    <div key={f.id} className="bg-white border-2 border-slate-50 p-8 rounded-[2.5rem] shadow-sm flex flex-col justify-between hover:border-blue-600 transition-all group">
+                    <div key={f.id} className="bg-white border-2 border-slate-50 p-8 rounded-[2.5rem] shadow-sm flex flex-col justify-between hover:border-blue-600 transition-all group text-slate-900">
                        <div>
                           <div className="flex justify-between items-start mb-4">
                              <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[8px] font-black uppercase">{f.category}</span>
                              <div className="flex gap-2">
-                                <button onClick={() => { setEditingFoodItem({...f}); setProjectionCount(100); setShowProjectionConsole(true); }} className="text-emerald-500 font-black text-[9px] uppercase hover:underline">Project PAX</button>
-                                <button onClick={() => { setEditingFoodItem({...f}); }} className="text-blue-500 font-black text-[9px] uppercase hover:underline">Edit</button>
+                                <button onClick={() => { setEditingFoodItem({...f}); setProjectionCount(100); setShowProjectionConsole(true); }} className="text-emerald-600 font-black text-[9px] uppercase hover:underline">Project PAX</button>
+                                <button onClick={() => setEditingFoodItem({...f})} className="text-blue-500 font-black text-[9px] uppercase hover:underline">Edit</button>
                                 <button onClick={() => deleteCateringItem(f.id)} className="text-red-400 font-black text-[9px] uppercase hover:underline">Del</button>
                              </div>
                           </div>
@@ -333,7 +333,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
 
       {/* PROJECTION CONSOLE MODAL */}
       {showProjectionConsole && editingFoodItem && (
-         <div className="fixed inset-0 z-[250] bg-slate-900/80 flex items-center justify-center p-4">
+         <div className="fixed inset-0 z-[250] bg-slate-900/80 flex items-center justify-center p-4 backdrop-blur-md">
             <div className="bg-white w-full max-w-2xl rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
                <div className="bg-emerald-600 p-10 text-white text-center">
                   <h3 className="text-3xl font-black uppercase tracking-tighter">Production Projection</h3>
@@ -352,16 +352,14 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                               {cnt}
                            </button>
                         ))}
-                        <div className="flex flex-col">
-                           <input type="number" placeholder="Custom" className="w-24 border-2 p-3 rounded-xl text-center font-black" onChange={(e) => setProjectionCount(parseInt(e.target.value) || 100)} />
-                        </div>
+                        <input type="number" placeholder="Custom" className="w-24 border-2 p-3 rounded-xl text-center font-black text-slate-900" onChange={(e) => setProjectionCount(parseInt(e.target.value) || 1)} />
                      </div>
                   </div>
 
                   <div className="bg-slate-50 border rounded-[2rem] p-8 space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar">
                      <h4 className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Calculated Raw Requirements for {projectionCount} PAX</h4>
                      {aggregatedPrepStats.length > 0 ? (
-                        <div className="divide-y">
+                        <div className="divide-y text-slate-900">
                            {aggregatedPrepStats.map((ing, i) => (
                               <div key={i} className="flex justify-between py-4">
                                  <span className="text-xs font-black uppercase text-slate-700">{ing.name}</span>
@@ -374,7 +372,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                            ))}
                         </div>
                      ) : (
-                        <p className="text-center py-10 text-slate-300 font-bold uppercase text-[9px]">No ingredients defined for this item.</p>
+                        <p className="text-center py-10 text-slate-300 font-bold uppercase text-[9px]">No ingredients defined.</p>
                      )}
                   </div>
                   <button onClick={() => { setShowProjectionConsole(false); setEditingFoodItem(null); }} className="w-full py-5 text-slate-400 font-black uppercase text-xs hover:text-slate-900 border-t">Close Projection</button>
@@ -383,20 +381,19 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
          </div>
       )}
 
-      {/* Booking Form Modal (Supports Edit & New) */}
+      {/* Booking Form Modal */}
       {showForm && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#f1f5f9] w-full max-w-6xl rounded-[4rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 max-h-[92vh] flex flex-col border-8 border-white">
              <div className="bg-blue-900 p-10 text-white flex justify-between items-center shrink-0">
                 <div>
-                   <h3 className="text-3xl font-black uppercase tracking-tighter leading-none">{formData.id ? 'Edit Event Plan' : 'Event Master Intake'}</h3>
+                   <h3 className="text-3xl font-black uppercase tracking-tighter leading-none">{formData.id ? 'Modify Event Plan' : 'Event Master Intake'}</h3>
                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-300 mt-2">Venue Deployment & Catering Planner</p>
                 </div>
-                <button onClick={() => { setShowForm(false); setFormData({ guestName: '', guestPhone: '', eventName: '', eventType: 'Corporate', date: new Date().toISOString().split('T')[0], startTime: '10:00', endTime: '18:00', totalAmount: 0, advancePaid: 0, discount: 0, paymentMode: 'Cash', status: 'TENTATIVE', guestCount: 100 }); setSelectedFoodIds([]); }} className="bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all font-black text-[10px] uppercase">Discard</button>
+                <button onClick={() => setShowForm(false)} className="bg-white/10 hover:bg-white/20 p-4 rounded-2xl transition-all font-black text-[10px] uppercase">Discard</button>
              </div>
              <div className="p-10 flex-1 overflow-y-auto custom-scrollbar space-y-12">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-                   {/* Col 1: Basic Info */}
                    <div className="lg:col-span-4 space-y-8">
                       <div className="p-8 bg-white rounded-[3rem] shadow-sm space-y-6">
                          <h4 className="text-[10px] font-black uppercase text-blue-900 tracking-widest border-b pb-4">A. Organizer Master Data</h4>
@@ -408,12 +405,11 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                               <label className="text-[10px] font-black uppercase text-slate-400 ml-1">PAX (Guests) *</label>
                               <input type="number" className="w-full border-2 p-4 rounded-2xl font-black text-xl bg-blue-50 text-blue-900 focus:bg-white transition-all outline-none" value={formData.guestCount} onChange={(e:any) => setFormData({...formData, guestCount: parseInt(e.target.value) || 0})} />
                            </div>
-                           <Inp label="Venue Rate (₹)" type="number" value={formData.totalAmount?.toString()} onChange={(v:any) => setFormData({...formData, totalAmount: parseFloat(v)})} />
+                           <Inp label="Venue Rate (₹)" type="number" value={formData.totalAmount?.toString()} onChange={(v:any) => setFormData({...formData, totalAmount: parseFloat(v) || 0})} />
                          </div>
                       </div>
                    </div>
 
-                   {/* Col 2: Food Box Selection */}
                    <div className="lg:col-span-8 space-y-8">
                       <div className="p-8 bg-white rounded-[3rem] shadow-sm flex flex-col min-h-[400px]">
                          <div className="flex justify-between items-center mb-8 border-b pb-4">
@@ -444,7 +440,7 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                          <div className="flex gap-10">
                             <div>
                                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Venue Cost</p>
-                               <p className="text-2xl font-black">₹{formData.totalAmount?.toFixed(2)}</p>
+                               <p className="text-2xl font-black">₹{(formData.totalAmount || 0).toFixed(2)}</p>
                             </div>
                             <div>
                                <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-2">Catering Net</p>
@@ -452,10 +448,10 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                             </div>
                          </div>
                          <div className="text-center md:text-right border-t md:border-t-0 md:border-l border-white/10 pt-8 md:pt-0 md:pl-10">
-                            <p className="text-[11px] font-black uppercase text-white/50 mb-1">Total Authorized Value</p>
+                            <p className="text-[11px] font-black uppercase text-white/50 mb-1">Total Authorization</p>
                             <p className="text-5xl font-black tracking-tighter text-blue-400">₹{((formData.totalAmount || 0) + calculateCateringTotal()).toFixed(2)}</p>
                             <button onClick={handleSaveBooking} className="mt-8 bg-blue-600 text-white px-14 py-5 rounded-[1.5rem] font-black uppercase text-xs shadow-xl hover:scale-105 active:scale-95 transition-all">
-                               {formData.id ? 'Save Changes' : 'Authorize Event Plan'}
+                               {formData.id ? 'Apply Modifications' : 'Authorize Event Plan'}
                             </button>
                          </div>
                       </div>
@@ -469,12 +465,12 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
       {/* Editing Food Item Modal */}
       {editingFoodItem && !showProjectionConsole && (
          <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-               <div className="bg-blue-900 p-8 text-white flex justify-between items-center">
-                  <h3 className="text-xl font-black uppercase tracking-tighter">{editingFoodItem.id ? 'Edit Menu Item' : 'New Menu Item'}</h3>
+            <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 flex flex-col">
+               <div className="bg-blue-900 p-8 text-white flex justify-between items-center shrink-0">
+                  <h3 className="text-xl font-black uppercase tracking-tighter leading-none">{editingFoodItem.id ? 'Edit Menu Item' : 'New Menu Item'}</h3>
                   <button onClick={() => setEditingFoodItem(null)} className="uppercase text-[10px] font-black opacity-60">Cancel</button>
                </div>
-               <div className="p-10 space-y-6">
+               <div className="p-10 space-y-6 overflow-y-auto custom-scrollbar flex-1 text-slate-900">
                   <Inp label="Dish Name" value={editingFoodItem.name} onChange={(v:any) => setEditingFoodItem({...editingFoodItem, name: v})} />
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1">
@@ -487,28 +483,28 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                            <option value="Beverage">Beverage</option>
                         </select>
                      </div>
-                     <Inp label="Plate Price" type="number" value={editingFoodItem.pricePerPlate?.toString()} onChange={(v:any) => setEditingFoodItem({...editingFoodItem, pricePerPlate: parseFloat(v)})} />
+                     <Inp label="Plate Price" type="number" value={editingFoodItem.pricePerPlate?.toString()} onChange={(v:any) => setEditingFoodItem({...editingFoodItem, pricePerPlate: parseFloat(v) || 0})} />
                   </div>
                   
-                  <div className="space-y-2">
-                     <p className="text-[10px] font-black uppercase text-slate-400 ml-1">Ingredients (Required for Projection)</p>
-                     <div className="flex gap-2">
-                        <button onClick={() => setEditingFoodItem({...editingFoodItem, ingredients: [...(editingFoodItem.ingredients || []), { name: '', qtyPerPlate: 0, unit: 'grams' }]})} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-black text-[9px] uppercase">+ Add Line</button>
+                  <div className="space-y-4 border-t pt-4">
+                     <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black uppercase text-slate-400 ml-1">Ingredients (Recipie Logic)</p>
+                        <button onClick={() => setEditingFoodItem({...editingFoodItem, ingredients: [...(editingFoodItem.ingredients || []), { name: '', qtyPerPlate: 0, unit: 'grams' }]})} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-black text-[9px] uppercase border">+ Add Ingredient</button>
                      </div>
-                     <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                     <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
                         {editingFoodItem.ingredients?.map((ing, i) => (
                            <div key={i} className="flex gap-2 animate-in slide-in-from-top-1">
-                              <input className="flex-1 border p-2 rounded-lg text-[10px] font-bold text-slate-900" placeholder="e.g. Rice" value={ing.name} onChange={e => {
+                              <input className="flex-1 border-2 p-2 rounded-xl text-[10px] font-bold text-slate-900 bg-slate-50" placeholder="e.g. Rice" value={ing.name} onChange={e => {
                                  const updated = [...editingFoodItem.ingredients!];
                                  updated[i].name = e.target.value;
                                  setEditingFoodItem({...editingFoodItem, ingredients: updated});
                               }} />
-                              <input type="number" className="w-16 border p-2 rounded-lg text-[10px] font-bold text-slate-900" placeholder="Qty" value={ing.qtyPerPlate} onChange={e => {
+                              <input type="number" className="w-16 border-2 p-2 rounded-xl text-[10px] font-bold text-slate-900 bg-slate-50" placeholder="Qty" value={ing.qtyPerPlate} onChange={e => {
                                  const updated = [...editingFoodItem.ingredients!];
-                                 updated[i].qtyPerPlate = parseFloat(e.target.value);
+                                 updated[i].qtyPerPlate = parseFloat(e.target.value) || 0;
                                  setEditingFoodItem({...editingFoodItem, ingredients: updated});
                               }} />
-                              <select className="w-16 border p-2 rounded-lg text-[9px] font-black text-slate-900" value={ing.unit} onChange={e => {
+                              <select className="w-20 border-2 p-2 rounded-xl text-[9px] font-black text-slate-900 bg-slate-50" value={ing.unit} onChange={e => {
                                  const updated = [...editingFoodItem.ingredients!];
                                  updated[i].unit = e.target.value;
                                  setEditingFoodItem({...editingFoodItem, ingredients: updated});
@@ -524,13 +520,12 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                      </div>
                   </div>
                   
-                  <button onClick={handleSaveFoodItem} className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl">Commit to Registry</button>
+                  <button onClick={handleSaveFoodItem} className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-black transition-all">Commit to Master Registry</button>
                </div>
             </div>
          </div>
       )}
 
-      {/* Active Event Summary Modal */}
       {activeBooking && !showSettleModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 flex flex-col border-8 border-slate-50">
@@ -545,13 +540,13 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                 <div className="space-y-4">
                    <div className="flex justify-between items-end border-b pb-6 mb-2">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Billing Amount</span>
-                      <span className="text-4xl font-black text-blue-900 tracking-tighter">₹{activeBooking.totalAmount.toFixed(2)}</span>
+                      <span className="text-4xl font-black text-blue-900 tracking-tighter">₹{(activeBooking.totalAmount || 0).toFixed(2)}</span>
                    </div>
                    {activeBooking.catering && (
                       <div className="p-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100 shadow-inner">
                          <div className="flex justify-between items-center border-b border-blue-100 pb-4 mb-4">
                             <p className="text-[11px] font-black text-blue-900 uppercase">Catering Detail Plan</p>
-                            <button onClick={() => handleEditExistingBooking(activeBooking)} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-black text-[9px] uppercase shadow-lg">Edit Details</button>
+                            <button onClick={() => handleEditExistingBooking(activeBooking)} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-black text-[9px] uppercase shadow-lg">Modify Event</button>
                          </div>
                          {activeBooking.catering.items.map((it, i) => (
                             <div key={i} className="flex justify-between text-[12px] font-bold text-slate-700 mb-3 hover:text-blue-600 transition-colors">
@@ -567,35 +562,34 @@ const BanquetModule: React.FC<BanquetModuleProps> = ({ settings, guests, rooms, 
                    )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                   <button onClick={() => setShowSettleModal(true)} className="bg-emerald-600 text-white py-5 rounded-[1.5rem] font-black uppercase text-[10px] shadow-lg hover:scale-105 transition-all">Settle Account</button>
-                   <button onClick={() => setActiveBooking(null)} className="bg-slate-100 text-slate-400 py-5 rounded-[1.5rem] font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Dismiss View</button>
+                   <button onClick={() => setShowSettleModal(true)} className="bg-emerald-600 text-white py-5 rounded-[1.5rem] font-black uppercase text-[10px] shadow-lg hover:scale-105 transition-all">Settle Folio</button>
+                   <button onClick={() => setActiveBooking(null)} className="bg-slate-100 text-slate-400 py-5 rounded-[1.5rem] font-black uppercase text-[10px] hover:bg-slate-200 transition-all">Dismiss</button>
                 </div>
              </div>
           </div>
         </div>
       )}
 
-      {/* Settle Modal */}
       {showSettleModal && activeBooking && (
         <div className="fixed inset-0 z-[250] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
            <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
               <div className="bg-emerald-600 p-8 text-white text-center">
                  <h3 className="text-2xl font-black uppercase tracking-tighter">Event Settlement</h3>
-                 <p className="text-[10px] font-bold uppercase opacity-80 mt-1">Authorized Value: ₹{activeBooking.totalAmount.toFixed(2)}</p>
+                 <p className="text-[10px] font-bold uppercase opacity-80 mt-1">Value: ₹{(activeBooking.totalAmount || 0).toFixed(2)}</p>
               </div>
-              <div className="p-10 space-y-8">
+              <div className="p-10 space-y-8 text-slate-900">
                  <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Target</label>
                     <div className="grid grid-cols-2 gap-2">
                        {['Cash', 'UPI', 'Mark to Room'].map(mode => (
-                          <button key={mode} onClick={() => setSettlementMode(mode)} className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all ${settlementMode === mode ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{mode}</button>
+                          <button key={mode} onClick={() => setSettlementMode(mode)} className={`py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all ${settlementMode === mode ? 'bg-emerald-600 border-emerald-600 text-white shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{mode}</button>
                        ))}
                     </div>
                  </div>
 
                  {settlementMode === 'Mark to Room' && (
                     <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-                       <input type="text" placeholder="Find Room..." className="w-full border-2 p-3 rounded-xl font-black text-xs bg-slate-50 outline-none focus:border-emerald-600 text-slate-900" value={roomSearch} onChange={e => setRoomSearch(e.target.value)} />
+                       <input type="text" placeholder="Find Resident Room..." className="w-full border-2 p-3 rounded-xl font-black text-xs bg-slate-50 outline-none focus:border-emerald-600 text-slate-900" value={roomSearch} onChange={e => setRoomSearch(e.target.value)} />
                        <div className="max-h-40 overflow-y-auto custom-scrollbar border rounded-xl p-1 space-y-1">
                           {activeResidents.map(b => (
                              <button key={b.id} onClick={() => setTargetRoomBookingId(b.id)} className={`w-full text-left p-3 rounded-lg flex justify-between items-center ${targetRoomBookingId === b.id ? 'bg-emerald-50 border-emerald-200 border text-emerald-700' : 'hover:bg-slate-50 text-slate-600'}`}>
@@ -624,7 +618,7 @@ const SubTab: React.FC<{ active: boolean, label: string, onClick: () => void }> 
 );
 
 const MenuInp = ({ label, value, onChange, type = "text", placeholder = "" }: any) => (
-  <div className="space-y-1.5 w-full">
+  <div className="space-y-1.5 w-full text-left">
     <label className="text-[10px] font-black uppercase text-slate-400 ml-1">{label}</label>
     <input type={type} className="w-full border-2 p-4 rounded-xl font-black text-[11px] bg-slate-50 outline-none focus:bg-white focus:border-blue-600 transition-all text-slate-900 shadow-inner" value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder} />
   </div>
