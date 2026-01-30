@@ -13,6 +13,7 @@ import GroupModule from './components/GroupModule.tsx';
 import Login from './components/Login.tsx';
 import ReservationEntry from './components/ReservationEntry.tsx';
 import GlobalBillArchive from './components/GlobalBillArchive.tsx';
+import GuestPortal from './components/GuestPortal.tsx';
 
 // --- MODULES ---
 import BanquetModule from './components/BanquetModule.tsx';
@@ -31,11 +32,12 @@ const GUEST_THEMES = [
 
 const getGuestTheme = (name: string) => {
   let hash = 0;
-  for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const safeName = name || 'Guest';
+  for (let i = 0; i < safeName.length; i++) hash = safeName.charCodeAt(i) + ((hash << 5) - hash);
   return GUEST_THEMES[Math.abs(hash) % GUEST_THEMES.length];
 };
 
-type AppTab = 'DASHBOARD' | 'BANQUET' | 'DINING' | 'FACILITY' | 'TRAVEL' | 'GROUP' | 'INVENTORY' | 'ACCOUNTING' | 'REPORTS' | 'SETTINGS';
+type AppTab = 'DASHBOARD' | 'BANQUET' | 'DINING' | 'FACILITY' | 'TRAVEL' | 'GROUP' | 'INVENTORY' | 'ACCOUNTING' | 'REPORTS' | 'SETTINGS' | 'GUEST_PORTAL';
 
 const App: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -52,11 +54,15 @@ const App: React.FC = () => {
     address: 'Powered by Digital Communique',
     agents: [{ name: 'Direct', commission: 0 }],
     roomTypes: ['DELUXE ROOM', 'BUDGET ROOM', 'STANDARD ROOM', 'AC FAMILY ROOM'],
-    taxRate: 12
+    taxRate: 12,
+    wifiPassword: 'hotelsphere123',
+    receptionPhone: '9',
+    roomServicePhone: '8'
   });
 
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isGuestPortal, setIsGuestPortal] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('RECEPTIONIST');
   const [activeTab, setActiveTab] = useState<AppTab>('DASHBOARD');
   
@@ -71,6 +77,11 @@ const App: React.FC = () => {
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('portal') === 'guest') {
+       setIsGuestPortal(true);
+    }
+
     const init = async () => {
       try {
         let r = await db.rooms.toArray();
@@ -169,45 +180,56 @@ const App: React.FC = () => {
         if (r.id === newRoomId) return { ...r, status: RoomStatus.OCCUPIED, currentBookingId: bookingId };
         return r;
       });
-      await db.rooms.bulkPut(updatedRooms);
+      await db.rooms.bulkPut(updatedRooms.filter(x => x.id));
       setRooms(updatedRooms);
       setBookings(bookings.map(b => b.id === bookingId ? updatedBooking : b));
-      alert(`Room shifted successfully.`);
     } catch (err) {
-      alert("Shift failed.");
+      console.error("Shift failed.", err);
     }
   };
 
   const renderContent = () => {
     if (activeBookingId) {
-      const b = bookings.find(x => x.id === activeBookingId)!;
-      const g = guests.find(x => x.id === b.guestId) || { name: 'Unknown Guest', phone: '' } as Guest;
-      const r = rooms.find(x => x.id === b.roomId)!;
+      const b = bookings.find(x => x.id === activeBookingId);
+      if (!b) { setActiveBookingId(null); return null; }
+      
+      const g = guests.find(x => x.id === b.guestId) || { id: 'unknown', name: 'Unknown Guest', phone: '', documents: {} } as Guest;
+      const r = rooms.find(x => x.id === b.roomId);
+      if (!r) { setActiveBookingId(null); return null; }
+
       return <StayManagement booking={b} guest={g} room={r} allRooms={rooms} allBookings={bookings} settings={settings} 
         onUpdate={async (bu) => { 
+          if (!bu.id) return;
           await db.bookings.put(bu); 
           setBookings(bookings.map(x => x.id === bu.id ? bu : x)); 
           if (bu.status === 'COMPLETED') {
              const rs = rooms.map(rm => rm.id === bu.roomId ? { ...rm, status: RoomStatus.DIRTY, currentBookingId: undefined } : rm);
-             await db.rooms.bulkPut(rs);
+             await db.rooms.bulkPut(rs.filter(x => x.id));
              setRooms(rs);
           }
         }} 
         onAddPayment={async (bid, p) => { 
-          const bOrig = bookings.find(x => x.id === bid)!;
+          const bOrig = bookings.find(x => x.id === bid);
+          if (!bOrig) return;
           const bu = { ...bOrig, payments: [...(bOrig.payments || []), p] };
           await db.bookings.put(bu);
           setBookings(bookings.map(x => x.id === bu.id ? bu : x));
         }} 
-        onUpdateGuest={async (gu) => { await db.guests.put(gu); setGuests(guests.map(x => x.id === gu.id ? gu : x)); }}
+        onUpdateGuest={async (gu) => { 
+          if (!gu.id || gu.id === 'unknown') return;
+          await db.guests.put(gu); 
+          setGuests(guests.map(x => x.id === gu.id ? gu : x)); 
+        }}
         onShiftRoom={(newRid) => handleShiftRoom(b.id, r.id, newRid)} 
         onClose={() => setActiveBookingId(null)} />;
     }
 
     if (showCheckinForm) {
       const initialRoomIds = Array.from(selectedRoomIds);
-      const initialRoom = selectedRoom || rooms.find(r => r.id === initialRoomIds[0]) || rooms.find(r => r.status === RoomStatus.VACANT)!;
+      const initialRoom = selectedRoom || rooms.find(r => r.id === initialRoomIds[0]) || rooms.find(r => r.status === RoomStatus.VACANT);
       
+      if (!initialRoom) { setShowCheckinForm(false); return null; }
+
       return <GuestCheckin 
         room={initialRoom} 
         allRooms={rooms} 
@@ -218,12 +240,12 @@ const App: React.FC = () => {
           const gId = data.guest.id || `G-${Date.now()}`;
           await db.guests.put({ ...data.guest, id: gId } as Guest);
           const bks = data.bookings.map(b => ({ ...b, id: `B-${Math.random().toString(36).substr(2, 5)}`, guestId: gId }));
-          await db.bookings.bulkPut(bks);
+          await db.bookings.bulkPut(bks.filter(x => x.id));
           const updatedRooms = rooms.map(r => {
             const b = bks.find(bk => bk.roomId === r.id);
             return b ? { ...r, status: RoomStatus.OCCUPIED, currentBookingId: b.id } : r;
           });
-          await db.rooms.bulkPut(updatedRooms);
+          await db.rooms.bulkPut(updatedRooms.filter(x => x.id));
           setGuests(await db.guests.toArray());
           setBookings(await db.bookings.toArray());
           setRooms(updatedRooms);
@@ -235,15 +257,15 @@ const App: React.FC = () => {
     }
 
     switch (activeTab) {
-      case 'BANQUET': return <BanquetModule settings={settings} guests={guests} rooms={rooms} roomBookings={bookings} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
-      case 'DINING': return <DiningModule rooms={rooms} bookings={bookings} guests={guests} settings={settings} userRole={currentUserRole} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
-      case 'FACILITY': return <FacilityModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
-      case 'TRAVEL': return <TravelModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={(u) => setBookings(prev => prev.map(b => b.id === u.id ? u : b))} />;
-      case 'GROUP': return <GroupModule groups={groups} setGroups={async (gs) => { setGroups(gs); await db.groups.bulkPut(gs); }} rooms={rooms} bookings={bookings} setBookings={setBookings} guests={guests} setGuests={setGuests} setRooms={setRooms} onAddTransaction={(tx) => { setTransactions([...transactions, tx]); db.transactions.put(tx); }} onGroupPayment={() => {}} settings={settings} />;
+      case 'BANQUET': return <BanquetModule settings={settings} guests={guests} rooms={rooms} roomBookings={bookings} onUpdateBooking={async (bu) => { await db.bookings.put(bu); setBookings(bookings.map(b => b.id === bu.id ? bu : b)); }} />;
+      case 'DINING': return <DiningModule rooms={rooms} bookings={bookings} guests={guests} settings={settings} userRole={currentUserRole} onUpdateBooking={async (bu) => { await db.bookings.put(bu); setBookings(bookings.map(b => b.id === bu.id ? bu : b)); }} />;
+      case 'FACILITY': return <FacilityModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={async (bu) => { await db.bookings.put(bu); setBookings(bookings.map(b => b.id === bu.id ? bu : b)); }} />;
+      case 'TRAVEL': return <TravelModule guests={guests} bookings={bookings} rooms={rooms} settings={settings} onUpdateBooking={async (bu) => { await db.bookings.put(bu); setBookings(bookings.map(b => b.id === bu.id ? bu : b)); }} />;
+      case 'GROUP': return <GroupModule groups={groups} setGroups={async (gs) => { setGroups(gs); await db.groups.bulkPut(gs.filter(x => x.id)); }} rooms={rooms} bookings={bookings} setBookings={async (bks) => { setBookings(bks); await db.bookings.bulkPut(bks.filter(x => x.id)); }} guests={guests} setGuests={setGuests} setRooms={async (rs) => { setRooms(rs); await db.rooms.bulkPut(rs.filter(x => x.id)); }} onAddTransaction={(tx) => { setTransactions([...transactions, tx]); db.transactions.put(tx); }} onGroupPayment={() => {}} settings={settings} />;
       case 'INVENTORY': return <InventoryModule settings={settings} />;
-      case 'ACCOUNTING': return <Accounting transactions={transactions} setTransactions={async (txs) => { setTransactions(txs); await db.transactions.bulkPut(txs); }} guests={guests} bookings={bookings} quotations={quotations} setQuotations={async (qs) => { setQuotations(qs); await db.quotations.bulkPut(qs); }} settings={settings} rooms={rooms} />;
+      case 'ACCOUNTING': return <Accounting transactions={transactions} setTransactions={async (txs) => { setTransactions(txs); await db.transactions.bulkPut(txs.filter(x => x.id)); }} guests={guests} bookings={bookings} quotations={quotations} setQuotations={async (qs) => { setQuotations(qs); await db.quotations.bulkPut(qs.filter(x => x.id)); }} settings={settings} rooms={rooms} />;
       case 'REPORTS': return <Reports bookings={bookings} guests={guests} rooms={rooms} settings={settings} transactions={transactions} shiftLogs={[]} cleaningLogs={[]} quotations={quotations} />;
-      case 'SETTINGS': return <Settings settings={settings} setSettings={async (s)=>{await db.settings.put({...s, id:'primary'}); setSettings(s);}} rooms={rooms} setRooms={async (rs)=>{setRooms(rs); await db.rooms.bulkPut(rs);}} supervisors={supervisors} setSupervisors={async (sups) => { setSupervisors(sups); await db.supervisors.bulkPut(sups); }} />;
+      case 'SETTINGS': return <Settings settings={settings} setSettings={async (s)=>{await db.settings.put({...s, id:'primary'}); setSettings(s);}} rooms={rooms} setRooms={async (rs)=>{setRooms(rs); await db.rooms.bulkPut(rs.filter(x => x.id));}} supervisors={supervisors} setSupervisors={async (sups) => { setSupervisors(sups); await db.supervisors.bulkPut(sups.filter(x => x.id)); }} />;
       default:
         return (
           <div className="p-4 md:p-8 pb-40 relative animate-in fade-in duration-700">
@@ -332,6 +354,12 @@ const App: React.FC = () => {
     <p className="font-black uppercase tracking-[0.5em] text-xs opacity-50">Initializing Core...</p>
   </div>;
 
+  if (isGuestPortal) return <GuestPortal settings={settings} allRooms={rooms} onCheckinComplete={() => {
+    db.rooms.toArray().then(setRooms);
+    db.bookings.toArray().then(setBookings);
+    db.guests.toArray().then(setGuests);
+  }} />;
+
   if (!isLoggedIn) return <Login onLogin={handleLogin} settings={settings} supervisors={supervisors} />;
 
   return (
@@ -351,7 +379,10 @@ const App: React.FC = () => {
             ))}
           </div>
         </div>
-        <button onClick={() => setIsLoggedIn(false)} className="text-[10px] font-black uppercase bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl ml-2">EXIT</button>
+        <div className="flex items-center gap-3">
+           <button onClick={() => window.open(window.location.href + '?portal=guest', '_blank')} className="text-[10px] font-black uppercase bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-xl">Guest Link</button>
+           <button onClick={() => setIsLoggedIn(false)} className="text-[10px] font-black uppercase bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl">EXIT</button>
+        </div>
       </nav>
 
       <main className="flex-1 overflow-y-auto custom-scrollbar no-print bg-[#f8f9fa]">{renderContent()}</main>
@@ -372,8 +403,9 @@ const App: React.FC = () => {
       {showRoomActions && selectedRoom && (
         <RoomActionModal room={selectedRoom} onClose={() => setShowRoomActions(false)} onCheckIn={() => { setShowRoomActions(false); setShowCheckinForm(true); }} 
           onStatusUpdate={async (s) => {
+            if (!selectedRoom.id) return;
             const rs = rooms.map(r => r.id === selectedRoom.id ? { ...r, status: s } : r);
-            await db.rooms.bulkPut(rs);
+            await db.rooms.put({ ...selectedRoom, status: s });
             setRooms(rs);
             setShowRoomActions(false);
           }} />
@@ -387,7 +419,7 @@ const App: React.FC = () => {
             const gId = data.guest.id || `G-${Date.now()}`;
             await db.guests.put({ ...data.guest, id: gId } as Guest);
             const bks = data.bookings.map(b => ({ ...b, id: `B-${Math.random().toString(36).substr(2, 5)}`, guestId: gId }));
-            await db.bookings.bulkPut(bks);
+            await db.bookings.bulkPut(bks.filter(x => x.id));
             setBookings([...bookings, ...bks]);
             setShowReservationForm(false);
           }} 

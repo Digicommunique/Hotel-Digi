@@ -72,8 +72,6 @@ export interface Guest {
   gender?: 'Male' | 'Female' | 'Other';
 }
 
-// --- BANQUET & CATERING MODULES ---
-
 export interface BanquetHall {
   id: string;
   name: string;
@@ -123,8 +121,6 @@ export interface EventBooking {
   catering?: EventCatering;
   guestCount: number;
 }
-
-// ... rest of the existing interfaces ...
 
 export interface RestaurantOutlet {
   id: string;
@@ -282,6 +278,7 @@ export interface Room {
   id: string;
   number: string;
   floor: number;
+  block?: string;
   type: string;
   price: number;
   status: RoomStatus;
@@ -338,6 +335,7 @@ export interface HostelSettings {
   address: string;
   agents: AgentConfig[];
   roomTypes: string[];
+  blocks?: string[];
   gstNumber?: string;
   taxRate?: number;
   cgstRate?: number;
@@ -351,6 +349,11 @@ export interface HostelSettings {
   supervisorPassword?: string;
   logo?: string;
   signature?: string;
+  // NEW FIELDS
+  wifiPassword?: string;
+  receptionPhone?: string;
+  roomServicePhone?: string;
+  restaurantMenuLink?: string;
 }
 
 export interface GroupProfile {

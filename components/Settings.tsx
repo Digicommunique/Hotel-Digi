@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { HostelSettings, Room, AgentConfig, RoomStatus, Booking, Transaction, Supervisor, UserRole } from '../types.ts';
+import { HostelSettings, Room, RoomStatus, Booking, Transaction, Supervisor, UserRole } from '../types.ts';
 import { exportDatabase, importDatabase, db } from '../services/db.ts';
 
 interface SettingsProps {
@@ -17,14 +18,20 @@ const Settings: React.FC<SettingsProps> = ({
   settings, setSettings, rooms, setRooms, setBookings, setTransactions,
   supervisors, setSupervisors
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'GENERAL' | 'ROOMS' | 'STAFF' | 'DATA' | 'TAX' | 'SECURITY' | 'CLOUD'>('GENERAL');
+  const [activeSubTab, setActiveSubTab] = useState<'GENERAL' | 'ROOMS' | 'STAFF' | 'DATA' | 'TAX' | 'GUEST_PORTAL'>('GENERAL');
   const [tempSettings, setTempSettings] = useState<HostelSettings>(settings);
   
-  const [newRoom, setNewRoom] = useState<Partial<Room>>({ number: '', floor: 1, type: settings.roomTypes[0] || '', price: 0 });
-  const [newAgent, setNewAgent] = useState<AgentConfig>({ name: '', commission: 0 });
+  const [newRoom, setNewRoom] = useState<Partial<Room>>({ 
+    number: '', 
+    floor: 1, 
+    block: settings.blocks?.[0] || 'Main',
+    type: settings.roomTypes[0] || '', 
+    price: 0 
+  });
   
+  const [newRoomType, setNewRoomType] = useState('');
+  const [newBlockName, setNewBlockName] = useState('');
   const [showAddStaff, setShowAddStaff] = useState(false);
-  // Default password to 'admin' as requested
   const [newStaff, setNewStaff] = useState<Partial<Supervisor>>({ name: '', loginId: '', password: 'admin', role: 'SUPERVISOR', assignedRoomIds: [], status: 'ACTIVE' });
 
   useEffect(() => {
@@ -46,18 +53,6 @@ const Settings: React.FC<SettingsProps> = ({
     }
   };
 
-  const handleAddAgent = () => {
-    if (!newAgent.name) return;
-    const updatedAgents = [...(tempSettings.agents || []), newAgent];
-    handleUpdate('agents', updatedAgents);
-    setNewAgent({ name: '', commission: 0 });
-  };
-
-  const handleRemoveAgent = (name: string) => {
-    const updatedAgents = (tempSettings.agents || []).filter(a => a.name !== name);
-    handleUpdate('agents', updatedAgents);
-  };
-
   const handleSaveStaff = async () => {
     if (!newStaff.name || !newStaff.loginId || !newStaff.password || !newStaff.role) return alert("Fill mandatory fields");
     const staff: Supervisor = {
@@ -69,46 +64,14 @@ const Settings: React.FC<SettingsProps> = ({
     await db.supervisors.put(staff);
     setNewStaff({ name: '', loginId: '', password: 'admin', role: 'SUPERVISOR', assignedRoomIds: [], status: 'ACTIVE' });
     setShowAddStaff(false);
-    alert("Staff member registered with default password 'admin'");
+    alert("Staff member registered.");
   };
 
-  const handleDeleteStaff = async (id: string) => {
-    if (!confirm("Remove this staff member?")) return;
+  const removeStaff = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this staff member?")) return;
     const updated = supervisors.filter(s => s.id !== id);
     setSupervisors(updated);
     await db.supervisors.delete(id);
-  };
-
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (confirm("Restore all records from this backup? All CURRENT data will be overwritten.")) {
-        try {
-          await importDatabase(file);
-          alert("Database restored successfully. The application will now reload.");
-          window.location.reload();
-        } catch (err) {
-          alert("Restore failed. Invalid backup file.");
-        }
-      }
-    }
-  };
-
-  const handleClearBookings = async () => {
-    if (confirm("CRITICAL ACTION: This will delete ALL Booking records and Invoice history. Proceed?")) {
-      try {
-        await db.bookings.clear();
-        await db.transactions.clear();
-        if (setBookings) setBookings([]);
-        if (setTransactions) setTransactions([]);
-        const resetRooms = rooms.map(r => ({ ...r, status: RoomStatus.VACANT, currentBookingId: undefined }));
-        const res = setRooms(resetRooms);
-        if (res instanceof Promise) await res;
-        alert("All booking and billing data cleared.");
-      } catch (err) {
-        alert("Error clearing data.");
-      }
-    }
   };
 
   const addRoom = async () => {
@@ -119,6 +82,30 @@ const Settings: React.FC<SettingsProps> = ({
     setNewRoom({...newRoom, number: ''});
   };
 
+  const addRoomType = () => {
+    if (!newRoomType) return;
+    const updatedTypes = [...(tempSettings.roomTypes || []), newRoomType];
+    handleUpdate('roomTypes', updatedTypes);
+    setNewRoomType('');
+  };
+
+  const addBlock = () => {
+    if (!newBlockName) return;
+    const updatedBlocks = [...(tempSettings.blocks || []), newBlockName];
+    handleUpdate('blocks', updatedBlocks);
+    setNewBlockName('');
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (confirm("This will overwrite all current local data. Proceed?")) {
+        await importDatabase(file);
+        window.location.reload();
+      }
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 bg-[#f8fafc] min-h-full pb-32 text-black overflow-x-hidden">
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
@@ -127,11 +114,9 @@ const Settings: React.FC<SettingsProps> = ({
           <SubTab active={activeSubTab === 'GENERAL'} label="Profile" onClick={() => setActiveSubTab('GENERAL')} />
           <SubTab active={activeSubTab === 'ROOMS'} label="Inventory" onClick={() => setActiveSubTab('ROOMS')} />
           <SubTab active={activeSubTab === 'STAFF'} label="Staff Roster" onClick={() => setActiveSubTab('STAFF')} />
-          <SubTab active={activeSubTab === 'DATA'} label="Backups" onClick={() => setActiveSubTab('DATA')} />
+          <SubTab active={activeSubTab === 'GUEST_PORTAL'} label="Guest App" onClick={() => setActiveSubTab('GUEST_PORTAL')} />
           <SubTab active={activeSubTab === 'TAX'} label="Taxation" onClick={() => setActiveSubTab('TAX')} />
-          {/* Fix: check activeSubTab state instead of undefined setActiveTab in line 133 */}
-          <SubTab active={activeSubTab === 'SECURITY'} label="Access" onClick={() => setActiveSubTab('SECURITY')} />
-          <SubTab active={activeSubTab === 'CLOUD'} label="Cloud" onClick={() => setActiveSubTab('CLOUD')} />
+          <SubTab active={activeSubTab === 'DATA'} label="Backups" onClick={() => setActiveSubTab('DATA')} />
         </div>
 
         {activeSubTab === 'GENERAL' && (
@@ -141,92 +126,117 @@ const Settings: React.FC<SettingsProps> = ({
               <Input label="Business Name" value={tempSettings.name} onChange={v => handleUpdate('name', v)} />
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Full Postal Address</label>
-                <textarea 
-                  className="w-full border-2 p-4 rounded-2xl font-bold h-24 bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all resize-none text-xs" 
-                  value={tempSettings.address} 
-                  onChange={e => handleUpdate('address', e.target.value)} 
-                />
+                <textarea className="w-full border-2 p-4 rounded-2xl font-bold h-24 bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all resize-none text-xs" value={tempSettings.address} onChange={e => handleUpdate('address', e.target.value)} />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 <Input label="Reception Phone" value={tempSettings.receptionPhone || ''} onChange={v => handleUpdate('receptionPhone', v)} />
+                 <Input label="Room Service" value={tempSettings.roomServicePhone || ''} onChange={v => handleUpdate('roomServicePhone', v)} />
+                 <Input label="Guest WiFi Password" value={tempSettings.wifiPassword || ''} onChange={v => handleUpdate('wifiPassword', v)} />
+              </div>
+            </section>
+
+            <section className="bg-white p-6 md:p-10 rounded-3xl border shadow-sm space-y-6 h-fit">
+               <h3 className="font-black uppercase text-xs tracking-widest border-b pb-4 text-blue-900">Brand Assets</h3>
                 <div className="space-y-3">
-                   <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Property Logo</label>
-                   <div className="aspect-video bg-slate-50 border-2 border-dashed rounded-3xl flex items-center justify-center relative group overflow-hidden">
-                      {tempSettings.logo ? <img src={tempSettings.logo} className="h-full object-contain" /> : <span className="text-[9px] font-black text-slate-300">NO LOGO</span>}
+                   <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Logo</label>
+                   <div className="h-24 bg-slate-50 border-2 border-dashed rounded-3xl flex items-center justify-center relative group overflow-hidden">
+                      {tempSettings.logo ? <img src={tempSettings.logo} className="h-full object-contain" /> : <span className="text-[9px] font-black text-slate-300">UPLOAD</span>}
                       <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, 'logo')} />
                    </div>
                 </div>
                 <div className="space-y-3">
-                   <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Authorized Signature</label>
-                   <div className="aspect-video bg-slate-50 border-2 border-dashed rounded-3xl flex items-center justify-center relative group overflow-hidden">
-                      {tempSettings.signature ? <img src={tempSettings.signature} className="h-full object-contain mix-blend-multiply" /> : <span className="text-[9px] font-black text-slate-300">NO SIGNATURE</span>}
+                   <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Sign</label>
+                   <div className="h-24 bg-slate-50 border-2 border-dashed rounded-3xl flex items-center justify-center relative group overflow-hidden">
+                      {tempSettings.signature ? <img src={tempSettings.signature} className="h-full object-contain" /> : <span className="text-[9px] font-black text-slate-300">UPLOAD</span>}
                       <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, 'signature')} />
                    </div>
                 </div>
-              </div>
-            </section>
-
-            <section className="bg-white p-6 md:p-10 rounded-3xl md:rounded-[3rem] border shadow-sm space-y-6 md:space-y-8 h-fit">
-               <h3 className="font-black uppercase text-xs tracking-widest border-b pb-4 md:pb-6 text-blue-900">Commission Profiles</h3>
-               <div className="space-y-4">
-                  <div className="flex flex-col gap-2">
-                    <input className="w-full border-2 p-3 rounded-xl font-bold text-xs bg-slate-50" placeholder="Agent Name" value={newAgent.name} onChange={e => setNewAgent({...newAgent, name: e.target.value})} />
-                    <div className="flex gap-2">
-                       <input className="flex-1 border-2 p-3 rounded-xl font-bold text-xs bg-slate-50" placeholder="Comm %" type="number" value={newAgent.commission} onChange={e => setNewAgent({...newAgent, commission: parseFloat(e.target.value) || 0})} />
-                       <button onClick={handleAddAgent} className="bg-blue-600 text-white px-6 rounded-xl font-black text-[10px] uppercase shadow-md">Add</button>
-                    </div>
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                    {(tempSettings.agents || []).map(a => (
-                      <div key={a.name} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100 group">
-                        <span className="text-[9px] font-black uppercase truncate mr-2">{a.name} <span className="text-blue-500">({a.commission}%)</span></span>
-                        <button onClick={() => handleRemoveAgent(a.name)} className="text-red-500 font-black text-lg">×</button>
-                      </div>
-                    ))}
-                  </div>
-               </div>
             </section>
           </div>
         )}
 
         {activeSubTab === 'ROOMS' && (
           <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
-             <section className="bg-white p-6 md:p-10 rounded-3xl md:rounded-[3rem] border shadow-sm space-y-6">
-                <h3 className="font-black uppercase text-xs text-blue-900 tracking-widest border-b pb-4 md:pb-6">Enroll New Inventory</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 items-end">
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* ROOM TYPE MANAGER */}
+                <section className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
+                   <h3 className="font-black uppercase text-xs text-blue-900 tracking-widest border-b pb-4">Manage Room Types</h3>
+                   <div className="flex gap-2">
+                      <input className="flex-1 border-2 p-3 rounded-xl font-bold text-xs bg-slate-50 outline-none focus:border-blue-500 text-black" placeholder="New Type (e.g. AC SUITE)" value={newRoomType} onChange={e => setNewRoomType(e.target.value)} />
+                      <button onClick={addRoomType} className="bg-blue-600 text-white px-6 rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-black transition-all">Create</button>
+                   </div>
+                   <div className="flex flex-wrap gap-2 mt-4 max-h-40 overflow-y-auto">
+                      {(tempSettings.roomTypes || []).map(t => (
+                        <div key={t} className="flex items-center gap-2 bg-blue-50 text-blue-900 px-4 py-2 rounded-xl font-black text-[10px] uppercase border border-blue-100">
+                          {t}
+                          <button onClick={() => handleUpdate('roomTypes', tempSettings.roomTypes.filter(x => x !== t))} className="hover:text-red-600 font-bold ml-1">×</button>
+                        </div>
+                      ))}
+                   </div>
+                </section>
+
+                {/* BLOCK MANAGER */}
+                <section className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
+                   <h3 className="font-black uppercase text-xs text-blue-900 tracking-widest border-b pb-4">Manage Blocks / Wings</h3>
+                   <div className="flex gap-2">
+                      <input className="flex-1 border-2 p-3 rounded-xl font-bold text-xs bg-slate-50 outline-none focus:border-blue-500 text-black" placeholder="New Block (e.g. WING B)" value={newBlockName} onChange={e => setNewBlockName(e.target.value)} />
+                      <button onClick={addBlock} className="bg-blue-600 text-white px-6 rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-black transition-all">Create</button>
+                   </div>
+                   <div className="flex flex-wrap gap-2 mt-4 max-h-40 overflow-y-auto">
+                      {(tempSettings.blocks || []).map(b => (
+                        <div key={b} className="flex items-center gap-2 bg-emerald-50 text-emerald-900 px-4 py-2 rounded-xl font-black text-[10px] uppercase border border-emerald-100">
+                          {b}
+                          <button onClick={() => handleUpdate('blocks', tempSettings.blocks?.filter(x => x !== b))} className="hover:text-red-600 font-bold ml-1">×</button>
+                        </div>
+                      ))}
+                   </div>
+                </section>
+             </div>
+
+             <section className="bg-white p-6 md:p-10 rounded-3xl border shadow-sm space-y-6">
+                <h3 className="font-black uppercase text-xs text-blue-900 tracking-widest border-b pb-4">New Room Entry</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-6 gap-6 items-end">
                    <Input label="Room No" value={newRoom.number} onChange={v => setNewRoom({...newRoom, number: v})} />
                    <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Category</label>
                       <select className="w-full border-2 p-3.5 rounded-2xl font-black text-[11px] bg-slate-50 outline-none" value={newRoom.type} onChange={e => setNewRoom({...newRoom, type: e.target.value})}>
-                         {tempSettings.roomTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                         {(tempSettings.roomTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                    </div>
                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Floor Level</label>
-                      <select className="w-full border-2 p-3.5 rounded-2xl font-black text-[11px] bg-slate-50 outline-none" value={newRoom.floor} onChange={e => setNewRoom({...newRoom, floor: parseInt(e.target.value) || 1})}>
-                         {[0, 1, 2, 3, 4, 5, 6].map(f => <option key={f} value={f}>Level {f}</option>)}
+                      <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Block</label>
+                      <select className="w-full border-2 p-3.5 rounded-2xl font-black text-[11px] bg-slate-50 outline-none" value={newRoom.block} onChange={e => setNewRoom({...newRoom, block: e.target.value})}>
+                         {(tempSettings.blocks || ['Main']).map(b => <option key={b} value={b}>{b}</option>)}
                       </select>
                    </div>
                    <Input label="Rate (₹)" type="number" value={newRoom.price} onChange={v => setNewRoom({...newRoom, price: parseFloat(v)})} />
-                   <button onClick={addRoom} className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-blue-700 transition-all">Add Room</button>
+                   <div className="sm:col-span-2">
+                      <button onClick={addRoom} className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:bg-black transition-all">Add Unit</button>
+                   </div>
                 </div>
              </section>
-             <div className="bg-white rounded-3xl md:rounded-[3rem] border shadow-sm overflow-hidden overflow-x-auto custom-scrollbar">
-                <table className="w-full text-left text-[11px] md:text-xs min-w-[600px]">
+
+             <div className="bg-white rounded-3xl border shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full text-left text-[11px]">
                    <thead className="bg-blue-900 text-white uppercase font-black">
-                      <tr><th className="p-4 md:p-6">No</th><th className="p-4 md:p-6">Floor</th><th className="p-4 md:p-6">Type</th><th className="p-4 md:p-6 text-right">Base Rate</th><th className="p-4 md:p-6 text-center">Action</th></tr>
+                      <tr>
+                        <th className="p-4">No</th>
+                        <th className="p-4">Block</th>
+                        <th className="p-4">Floor</th>
+                        <th className="p-4">Type</th>
+                        <th className="p-4 text-right">Base Rate</th>
+                        <th className="p-4 text-center">Action</th>
+                      </tr>
                    </thead>
                    <tbody className="divide-y font-bold uppercase">
                       {rooms.map(r => (
-                        <tr key={r.id} className="hover:bg-slate-50">
-                           <td className="p-4 md:p-6 text-base md:text-lg font-black">{r.number}</td>
-                           <td className="p-4 md:p-6 text-slate-400">Level {r.floor}</td>
-                           <td className="p-4 md:p-6"><span className="bg-blue-50 text-blue-900 px-3 md:px-4 py-1 rounded-xl border border-blue-100">{r.type.split(' ')[0]}</span></td>
-                           <td className="p-4 md:p-6 text-right font-black">₹{r.price}</td>
-                           <td className="p-4 md:p-6 text-center"><button onClick={async () => {
-                              const updated = rooms.filter(x => x.id !== r.id);
-                              const res = setRooms(updated);
-                              if (res instanceof Promise) await res;
-                           }} className="text-red-500 font-black hover:underline uppercase text-[9px]">Delete</button></td>
+                        <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                           <td className="p-4 text-base font-black">{r.number}</td>
+                           <td className="p-4"><span className="text-emerald-600 font-black">{r.block || 'Main'}</span></td>
+                           <td className="p-4 text-slate-400">Level {r.floor}</td>
+                           <td className="p-4"><span className="bg-blue-50 text-blue-900 px-3 py-1 rounded-xl border">{r.type}</span></td>
+                           <td className="p-4 text-right font-black">₹{r.price}</td>
+                           <td className="p-4 text-center"><button onClick={() => setRooms(rooms.filter(x => x.id !== r.id))} className="text-red-500 font-black hover:underline">Delete</button></td>
                         </tr>
                       ))}
                    </tbody>
@@ -236,155 +246,174 @@ const Settings: React.FC<SettingsProps> = ({
         )}
 
         {activeSubTab === 'STAFF' && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-             <div className="flex justify-between items-center">
+          <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
+             <div className="flex justify-between items-center bg-white p-8 rounded-[2.5rem] border shadow-sm">
                 <div>
-                   <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Staff Roster</h3>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage login credentials for Managers, Waiters, Chefs & Supervisors</p>
+                  <h3 className="font-black uppercase text-xl text-blue-900 tracking-tighter">Team Roster</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Manage Personnel Access & Roles</p>
                 </div>
-                <button onClick={() => setShowAddStaff(true)} className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ Add Member</button>
+                <button onClick={() => setShowAddStaff(true)} className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-black transition-all">+ Add Team Member</button>
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {supervisors.map(staff => (
-                  <div key={staff.id} className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6 group relative overflow-hidden">
-                     <div className="flex justify-between items-start">
-                        <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-900 text-xl font-black">
-                           {staff.name.charAt(0)}
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${staff.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                           {staff.status}
-                        </span>
+                  <div key={staff.id} className="bg-white border-2 rounded-[2.5rem] p-8 shadow-sm hover:border-blue-500 transition-all group">
+                     <div className="flex justify-between items-start mb-6">
+                        <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-900 text-xl font-black">{staff.name.charAt(0)}</div>
+                        <span className={`px-4 py-1 rounded-full text-[8px] font-black uppercase ${staff.status === 'ACTIVE' ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-red-50 text-red-600'}`}>{staff.status}</span>
                      </div>
-                     <div>
-                        <div className="flex items-center gap-2">
-                           <h4 className="text-xl font-black text-blue-900 uppercase tracking-tight">{staff.name}</h4>
-                           <span className="bg-slate-100 px-2 py-0.5 rounded text-[8px] font-black text-slate-500 uppercase">{staff.role}</span>
-                        </div>
-                        <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                           <div className="flex justify-between items-center">
-                              <span className="text-[9px] font-black text-slate-400 uppercase">Login ID</span>
-                              <span className="text-[11px] font-black text-blue-900 select-all">{staff.loginId}</span>
-                           </div>
-                           <div className="flex justify-between items-center">
-                              <span className="text-[9px] font-black text-slate-400 uppercase">Password</span>
-                              <span className="text-[11px] font-black text-slate-700 select-all">{staff.password}</span>
-                           </div>
-                        </div>
-                     </div>
-                     <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
-                        <p className="text-[9px] font-black uppercase text-blue-900">
-                           {staff.assignedRoomIds?.length || 0} Units Assigned
-                        </p>
-                        <button onClick={() => handleDeleteStaff(staff.id)} className="text-red-400 hover:text-red-600 font-black text-xs uppercase">Delete</button>
+                     <h4 className="text-xl font-black text-slate-800 uppercase tracking-tight">{staff.name}</h4>
+                     <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1">{staff.role}</p>
+                     <div className="mt-8 pt-6 border-t flex justify-between items-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">ID: {staff.loginId}</p>
+                        <button onClick={() => removeStaff(staff.id)} className="text-red-300 hover:text-red-500 font-black uppercase text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Remove</button>
                      </div>
                   </div>
                 ))}
              </div>
 
              {showAddStaff && (
-               <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                  <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-                     <div className="bg-blue-900 p-10 text-white flex justify-between items-center">
-                        <h3 className="text-2xl font-black uppercase tracking-tighter">Register Staff Account</h3>
-                        <button onClick={() => setShowAddStaff(false)} className="text-[10px] font-black uppercase opacity-60">Cancel</button>
-                     </div>
-                     <div className="p-10 space-y-6">
-                        <Input label="Full Name" value={newStaff.name} onChange={v => setNewStaff({...newStaff, name: v})} />
-                        <div className="space-y-1">
-                           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Staff Designation / Role</label>
-                           <select 
-                              className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-slate-50 outline-none focus:bg-white focus:border-blue-500 transition-all text-black" 
-                              value={newStaff.role} 
-                              onChange={e => setNewStaff({...newStaff, role: e.target.value as UserRole})}
-                           >
-                              <option value="MANAGER">MANAGER (Full Facility/Events Control)</option>
-                              <option value="WAITER">WAITER (Floor POS & Billing)</option>
-                              <option value="CHEF">CHEF (Kitchen KDS Display)</option>
-                              <option value="SUPERVISOR">SUPERVISOR (Floor & Cleaning Ops)</option>
-                              <option value="RECEPTIONIST">RECEPTIONIST (Room Intake)</option>
-                              <option value="ACCOUNTANT">ACCOUNTANT (Finance Audit)</option>
-                           </select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                           <Input label="New Login ID" value={newStaff.loginId} onChange={v => setNewStaff({...newStaff, loginId: v})} />
-                           <Input label="New Password" value={newStaff.password} onChange={v => setNewStaff({...newStaff, password: v})} />
-                        </div>
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Block-wise Assignment (Optional)</label>
-                           <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto custom-scrollbar p-2 bg-slate-50 rounded-2xl border">
-                              {rooms.map(r => (
-                                <button 
-                                  key={r.id}
-                                  onClick={() => {
-                                    const ids = newStaff.assignedRoomIds || [];
-                                    const updated = ids.includes(r.id) ? ids.filter(x => x !== r.id) : [...ids, r.id];
-                                    setNewStaff({...newStaff, assignedRoomIds: updated});
-                                  }}
-                                  className={`p-2 rounded-xl border-2 font-black text-[9px] uppercase transition-all ${newStaff.assignedRoomIds?.includes(r.id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-white'}`}
-                                >
-                                  Room {r.number}
-                                </button>
-                              ))}
-                           </div>
-                        </div>
-                        <button onClick={handleSaveStaff} className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-black transition-all">Authorize & Generate Credentials</button>
-                     </div>
+               <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+                  <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+                    <div className="bg-blue-900 p-8 text-white flex justify-between items-center">
+                       <h3 className="text-xl font-black uppercase tracking-tighter">Add Team Member</h3>
+                       <button onClick={() => setShowAddStaff(false)} className="text-[10px] font-black opacity-60 uppercase">Cancel</button>
+                    </div>
+                    <div className="p-10 space-y-6">
+                       <Input label="Full Name" value={newStaff.name} onChange={v => setNewStaff({...newStaff, name: v})} />
+                       <div className="grid grid-cols-2 gap-4">
+                          <Input label="Login ID" value={newStaff.loginId} onChange={v => setNewStaff({...newStaff, loginId: v})} />
+                          <Input label="Secret Key" type="password" value={newStaff.password} onChange={v => setNewStaff({...newStaff, password: v})} />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Assign Role</label>
+                          <select className="w-full border-2 p-4 rounded-2xl font-black text-xs bg-slate-50 outline-none" value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value as UserRole})}>
+                             <option value="MANAGER">MANAGER</option>
+                             <option value="SUPERVISOR">SUPERVISOR</option>
+                             <option value="RECEPTIONIST">RECEPTIONIST</option>
+                             <option value="ACCOUNTANT">ACCOUNTANT</option>
+                             <option value="WAITER">WAITER</option>
+                             <option value="CHEF">CHEF</option>
+                             <option value="STOREKEEPER">STOREKEEPER</option>
+                          </select>
+                       </div>
+                       <button onClick={handleSaveStaff} className="w-full bg-blue-900 text-white py-6 rounded-[2rem] font-black uppercase text-xs shadow-xl tracking-widest hover:bg-black transition-all">Authorize Personnel</button>
+                    </div>
                   </div>
                </div>
              )}
           </div>
         )}
 
-        {activeSubTab === 'DATA' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
-             <section className="bg-white p-10 rounded-[3rem] border shadow-sm space-y-8">
-                <div className="flex items-center gap-6">
-                   <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-4xl">💾</div>
-                   <div>
-                      <h3 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">System Backups</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global data export and recovery</p>
-                   </div>
+        {activeSubTab === 'TAX' && (
+          <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+             <section className="bg-white p-8 md:p-12 rounded-[3.5rem] border shadow-sm space-y-10">
+                <div className="border-b pb-6">
+                   <h3 className="text-3xl font-black text-blue-900 uppercase tracking-tighter">Taxation Protocol</h3>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Configuring GST & SAC Compliance</p>
                 </div>
-                <div className="space-y-4">
-                   <button onClick={exportDatabase} className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl">Download Master JSON Export</button>
-                   <div className="relative">
-                      <button className="w-full bg-white border-2 border-blue-900 text-blue-900 py-5 rounded-2xl font-black uppercase text-xs">Restore System from File</button>
-                      <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportFile} />
-                   </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <Input label="Property GSTIN Identification" value={tempSettings.gstNumber || ''} onChange={v => handleUpdate('gstNumber', v)} />
+                   <Input label="Primary SAC / HSN Code" value={tempSettings.hsnCode || ''} onChange={v => handleUpdate('hsnCode', v)} />
                 </div>
-             </section>
 
-             <section className="bg-red-50 p-10 rounded-[3rem] border border-red-100 space-y-8">
-                <div className="flex items-center gap-6">
-                   <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center text-4xl">⚠️</div>
-                   <div>
-                      <h3 className="text-2xl font-black text-red-600 uppercase tracking-tighter leading-none">Danger Zone</h3>
-                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mt-1">Irreversible System Actions</p>
-                   </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 p-8 rounded-[2.5rem] border">
+                   <Input label="Global GST %" type="number" value={tempSettings.taxRate?.toString() || '0'} onChange={v => handleUpdate('taxRate', parseFloat(v) || 0)} />
+                   <Input label="CGST %" type="number" value={tempSettings.cgstRate?.toString() || '0'} onChange={v => handleUpdate('cgstRate', parseFloat(v) || 0)} />
+                   <Input label="SGST %" type="number" value={tempSettings.sgstRate?.toString() || '0'} onChange={v => handleUpdate('sgstRate', parseFloat(v) || 0)} />
+                   <Input label="IGST %" type="number" value={tempSettings.igstRate?.toString() || '0'} onChange={v => handleUpdate('igstRate', parseFloat(v) || 0)} />
                 </div>
-                <div className="space-y-4">
-                   <button onClick={handleClearBookings} className="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-black transition-all">Factory Reset</button>
+                
+                <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl flex gap-6 items-start">
+                   <div className="text-2xl mt-1">💡</div>
+                   <p className="text-[11px] font-bold text-blue-900 leading-relaxed uppercase">
+                      Changes here will reflect on all new invoices and duplicate re-prints. Ensure rates are as per the latest government regulations for hospitality.
+                   </p>
                 </div>
              </section>
           </div>
         )}
 
-        {/* ... Other subtabs remain unchanged ... */}
+        {activeSubTab === 'DATA' && (
+          <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <section className="bg-white p-12 rounded-[3.5rem] border shadow-sm space-y-8 text-center">
+                   <div className="w-20 h-20 bg-blue-50 text-blue-900 rounded-[2rem] flex items-center justify-center text-4xl mx-auto shadow-inner">📤</div>
+                   <div>
+                      <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Export Archive</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Download full local database as JSON</p>
+                   </div>
+                   <button onClick={exportDatabase} className="w-full bg-blue-900 text-white py-6 rounded-[2rem] font-black uppercase text-xs shadow-xl tracking-widest hover:bg-black transition-all">Download Now</button>
+                </section>
+
+                <section className="bg-white p-12 rounded-[3.5rem] border shadow-sm space-y-8 text-center">
+                   <div className="w-20 h-20 bg-emerald-50 text-emerald-900 rounded-[2rem] flex items-center justify-center text-4xl mx-auto shadow-inner">📥</div>
+                   <div>
+                      <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Restore Node</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Recover data from a backup file</p>
+                   </div>
+                   <div className="relative">
+                      <button className="w-full bg-emerald-600 text-white py-6 rounded-[2rem] font-black uppercase text-xs shadow-xl tracking-widest transition-all">Upload JSON</button>
+                      <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImport} accept=".json" />
+                   </div>
+                </section>
+             </div>
+             
+             <div className="bg-orange-50 border-2 border-dashed border-orange-200 p-10 rounded-[3rem] text-center">
+                <p className="text-[12px] font-black text-orange-900 uppercase tracking-tight">Warning: Restore will overwrite all existing local records.</p>
+                <p className="text-[10px] font-bold text-orange-600 uppercase mt-2 opacity-70">Always export a fresh backup before attempting a restore.</p>
+             </div>
+          </div>
+        )}
+
+        {activeSubTab === 'GUEST_PORTAL' && (
+           <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+              <section className="bg-white p-12 rounded-[3.5rem] border shadow-sm space-y-10">
+                 <div className="border-b pb-6">
+                    <h3 className="text-3xl font-black text-blue-900 uppercase tracking-tighter">Guest Portal Config</h3>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Smart Interaction & Self-Service Nodes</p>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <Input label="WiFi Name (SSID)" value={tempSettings.name + '_Guest'} readOnly />
+                    <Input label="WiFi Password" value={tempSettings.wifiPassword || ''} onChange={v => handleUpdate('wifiPassword', v)} />
+                 </div>
+
+                 <Input label="Standalone Restaurant Menu Link" value={tempSettings.restaurantMenuLink || ''} onChange={v => handleUpdate('restaurantMenuLink', v)} placeholder="https://..." />
+                 
+                 <div className="flex flex-col items-center gap-6 pt-10 border-t">
+                    <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border-4 border-blue-900">
+                       <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin + '?portal=guest')}`} alt="Guest Portal QR" />
+                    </div>
+                    <div className="text-center">
+                       <p className="text-[11px] font-black uppercase text-blue-900">QR CODE FOR GUEST SELF-CHECKIN</p>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest leading-relaxed">Guests can scan this at reception for <br/> express check-in and room service</p>
+                    </div>
+                 </div>
+              </section>
+           </div>
+        )}
       </div>
     </div>
   );
 };
 
 const SubTab: React.FC<{ active: boolean, label: string, onClick: () => void }> = ({ active, label, onClick }) => (
-  <button onClick={onClick} className={`px-4 md:px-8 py-2.5 md:py-4 rounded-xl md:rounded-[1.5rem] font-black text-[9px] md:text-[11px] uppercase tracking-widest transition-all shrink-0 ${active ? 'bg-blue-900 text-white shadow-lg' : 'bg-transparent text-slate-400 hover:text-slate-900'}`}>{label}</button>
+  <button onClick={onClick} className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shrink-0 ${active ? 'bg-blue-900 text-white shadow-lg' : 'bg-transparent text-slate-400 hover:text-slate-900'}`}>{label}</button>
 );
 
-// Fix: Access e.target.value correctly in onChange handler
-const Input: React.FC<{ label: string, value: any, onChange: (v: string) => void, type?: string }> = ({ label, value, onChange, type = "text" }) => (
+const Input: React.FC<{ label: string, value: any, onChange?: (v: string) => void, type?: string, readOnly?: boolean, placeholder?: string }> = ({ label, value, onChange, type = "text", readOnly = false, placeholder = "" }) => (
   <div className="space-y-1 w-full text-left">
     <label className="text-[10px] font-black uppercase text-gray-400 ml-2 tracking-widest">{label}</label>
-    <input type={type} className="w-full border-2 p-3.5 rounded-2xl font-black text-[11px] md:text-xs bg-slate-50 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner text-black" value={value || ''} onChange={e => onChange(e.target.value)} />
+    <input 
+      type={type} 
+      readOnly={readOnly}
+      placeholder={placeholder}
+      className={`w-full border-2 p-3.5 rounded-2xl font-black text-[11px] ${readOnly ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'} transition-all shadow-inner text-black outline-none focus:border-blue-500`} 
+      value={value || ''} 
+      onChange={e => onChange && onChange(e.target.value)} 
+    />
   </div>
 );
 

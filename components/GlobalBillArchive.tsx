@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../services/db';
-import { Booking, DiningBill, EventBooking, FacilityUsage, GroupProfile, Guest, Room, HostelSettings } from '../types';
+// Fix: Import RoomStatus from types
+import { Booking, DiningBill, EventBooking, FacilityUsage, GroupProfile, Guest, Room, HostelSettings, RoomStatus } from '../types';
 import InvoiceView from './InvoiceView';
 
 interface GlobalBillArchiveProps {
@@ -48,48 +49,43 @@ const GlobalBillArchive: React.FC<GlobalBillArchiveProps> = ({ onClose, settings
     const term = searchTerm.toLowerCase();
     const list: any[] = [];
 
-    // 1. Room Bookings
     if (filter === 'ALL' || filter === 'ROOM') {
       data.roomBookings.forEach(b => {
         const guest = guests.find(g => g.id === b.guestId);
         const room = rooms.find(r => r.id === b.roomId);
-        if (b.bookingNo.toLowerCase().includes(term) || guest?.name.toLowerCase().includes(term) || guest?.phone.includes(term) || room?.number.includes(term)) {
-          list.push({ type: 'ROOM', date: b.checkInDate, title: `Room ${room?.number}`, sub: guest?.name, amount: b.basePrice, raw: b });
+        if (b.bookingNo.toLowerCase().includes(term) || (guest?.name || '').toLowerCase().includes(term) || (guest?.phone || '').includes(term) || (room?.number || '').includes(term)) {
+          list.push({ type: 'ROOM', date: b.checkInDate, title: `Room ${room?.number || '?'}`, sub: guest?.name || 'Unknown', amount: b.basePrice, raw: b });
         }
       });
     }
 
-    // 2. Dining Bills
     if (filter === 'ALL' || filter === 'DINING') {
       data.diningBills.forEach(b => {
-        if (b.billNo.toLowerCase().includes(term) || b.guestName.toLowerCase().includes(term) || b.guestPhone.includes(term)) {
-          list.push({ type: 'DINING', date: b.date.split('T')[0], title: `Dining Bill #${b.billNo}`, sub: b.guestName || 'Walk-in', amount: b.grandTotal, raw: b });
+        if (b.billNo.toLowerCase().includes(term) || (b.guestName || '').toLowerCase().includes(term) || (b.guestPhone || '').includes(term)) {
+          list.push({ type: 'DINING', date: (b.date || '').split('T')[0], title: `Dining Bill #${b.billNo}`, sub: b.guestName || 'Walk-in', amount: b.grandTotal, raw: b });
         }
       });
     }
 
-    // 3. Event Bookings
     if (filter === 'ALL' || filter === 'EVENT') {
       data.eventBookings.forEach(b => {
-        if (b.eventName.toLowerCase().includes(term) || b.guestName.toLowerCase().includes(term) || b.guestPhone.includes(term)) {
+        if ((b.eventName || '').toLowerCase().includes(term) || (b.guestName || '').toLowerCase().includes(term) || (b.guestPhone || '').includes(term)) {
           list.push({ type: 'EVENT', date: b.date, title: `Event: ${b.eventName}`, sub: b.guestName, amount: b.totalAmount, raw: b });
         }
       });
     }
 
-    // 4. Facility Usage
     if (filter === 'ALL' || filter === 'FACILITY') {
       data.facilityUsage.forEach(u => {
         const guest = guests.find(g => g.id === u.guestId);
         const name = guest?.name || (u as any).outsiderInfo?.name || 'Walk-in';
         const phone = guest?.phone || (u as any).outsiderInfo?.phone || '';
         if (name.toLowerCase().includes(term) || phone.includes(term)) {
-          list.push({ type: 'FACILITY', date: u.startTime.split('T')[0], title: u.facilityId, sub: name, amount: u.amount, raw: u });
+          list.push({ type: 'FACILITY', date: (u.startTime || '').split('T')[0], title: u.facilityId, sub: name, amount: u.amount, raw: u });
         }
       });
     }
 
-    // 5. Group Profiles
     if (filter === 'ALL' || filter === 'GROUP') {
       data.groups.forEach(g => {
         if (g.groupName.toLowerCase().includes(term) || g.headName.toLowerCase().includes(term) || g.phone.includes(term)) {
@@ -98,7 +94,7 @@ const GlobalBillArchive: React.FC<GlobalBillArchiveProps> = ({ onClose, settings
       });
     }
 
-    return list.sort((a, b) => b.date.localeCompare(a.date));
+    return list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }, [data, searchTerm, filter, guests, rooms]);
 
   return (
@@ -190,9 +186,9 @@ const GlobalBillArchive: React.FC<GlobalBillArchiveProps> = ({ onClose, settings
            <div className="flex-1 overflow-y-auto bg-gray-500/30 p-10 custom-scrollbar">
               {selectedRecord.type === 'ROOM' && (
                 <InvoiceView 
-                  guest={guests.find(g => g.id === selectedRecord.data.guestId)!}
+                  guest={guests.find(g => g.id === selectedRecord.data.guestId) || { id: 'unknown', name: 'Archived Guest', phone: '', documents: {} } as Guest}
                   booking={selectedRecord.data}
-                  room={rooms.find(r => r.id === selectedRecord.data.roomId)!}
+                  room={rooms.find(r => r.id === selectedRecord.data.roomId) || { id: 'unknown', number: '?', floor: 0, type: 'Unknown', price: 0, status: RoomStatus.VACANT }}
                   settings={settings}
                   payments={selectedRecord.data.payments || []}
                 />
@@ -200,7 +196,6 @@ const GlobalBillArchive: React.FC<GlobalBillArchiveProps> = ({ onClose, settings
               {selectedRecord.type === 'DINING' && (
                 <DiningInvoiceView bill={selectedRecord.data} settings={settings} />
               )}
-              {/* Other modules would have their specific print views here */}
               {(selectedRecord.type !== 'ROOM' && selectedRecord.type !== 'DINING') && (
                 <div className="bg-white p-12 max-w-3xl mx-auto rounded-xl shadow-2xl text-center font-black uppercase text-slate-900">
                   Detailed duplicate view for {selectedRecord.type} coming soon.
@@ -213,7 +208,6 @@ const GlobalBillArchive: React.FC<GlobalBillArchiveProps> = ({ onClose, settings
   );
 };
 
-// Specialized minimal print view for Dining
 const DiningInvoiceView = ({ bill, settings }: { bill: DiningBill, settings: HostelSettings }) => (
   <div className="bg-white p-10 w-[148mm] min-h-[210mm] mx-auto border shadow-2xl font-sans text-[11px] leading-tight invoice-sheet text-slate-900">
      <div className="text-center border-b-2 pb-6 mb-6">
@@ -241,7 +235,7 @@ const DiningInvoiceView = ({ bill, settings }: { bill: DiningBill, settings: Hos
            </tr>
         </thead>
         <tbody className="font-bold uppercase">
-           {bill.items.map((it, i) => (
+           {(bill.items || []).map((it, i) => (
               <tr key={i}>
                  <td className="py-2">{it.name}</td>
                  <td className="py-2 text-center">x{it.quantity}</td>
@@ -252,9 +246,9 @@ const DiningInvoiceView = ({ bill, settings }: { bill: DiningBill, settings: Hos
         </tbody>
      </table>
      <div className="space-y-2 font-black uppercase text-right border-t pt-4">
-        <div className="flex justify-between text-[10px] opacity-60"><span>Subtotal</span><span>₹{bill.subTotal.toFixed(2)}</span></div>
-        <div className="flex justify-between text-[10px] opacity-60"><span>Tax</span><span>₹{bill.taxAmount.toFixed(2)}</span></div>
-        <div className="flex justify-between text-lg border-t pt-2 text-blue-900 tracking-tighter"><span>Grand Total</span><span>₹{bill.grandTotal.toFixed(2)}</span></div>
+        <div className="flex justify-between text-[10px] opacity-60"><span>Subtotal</span><span>₹{(bill.subTotal || 0).toFixed(2)}</span></div>
+        <div className="flex justify-between text-[10px] opacity-60"><span>Tax</span><span>₹{(bill.taxAmount || 0).toFixed(2)}</span></div>
+        <div className="flex justify-between text-lg border-t pt-2 text-blue-900 tracking-tighter"><span>Grand Total</span><span>₹{(bill.grandTotal || 0).toFixed(2)}</span></div>
      </div>
      <div className="mt-12 text-center text-[9px] font-black opacity-30 uppercase tracking-widest">
         *** Thank you for dining with us ***

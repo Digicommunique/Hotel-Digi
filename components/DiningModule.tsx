@@ -12,7 +12,23 @@ interface DiningModuleProps {
   onUpdateBooking?: (updated: Booking) => void;
 }
 
-const CATEGORIES = ["Starters", "Main Course", "Rice", "Breads", "Desserts", "Beverages", "Mocktail/Cocktail"];
+const CATEGORIES = [
+  "Mocktails", 
+  "Soup", 
+  "Papad and Salad", 
+  "Raita", 
+  "Breakfast", 
+  "Pizza and Sandwiches", 
+  "Chinese Rice and Noodles", 
+  "Tandoori Starter", 
+  "Indian Main Course", 
+  "Rice and Biryani", 
+  "Tandoori Roti", 
+  "Sweets", 
+  "Pasta", 
+  "Chinese Starter"
+];
+
 const DIETARY_TYPES: DietaryType[] = ['VEG', 'NON-VEG', 'EGG'];
 
 const DiningModule: React.FC<DiningModuleProps> = ({ rooms, bookings, guests, settings, userRole, onUpdateBooking }) => {
@@ -34,7 +50,7 @@ const DiningModule: React.FC<DiningModuleProps> = ({ rooms, bookings, guests, se
   
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ 
-    name: '', category: 'Main Course', subcategory: '', price: 0, dietaryType: 'VEG', isAvailable: true 
+    name: '', category: 'Indian Main Course', subcategory: '', price: 0, dietaryType: 'VEG', isAvailable: true 
   });
 
   const [showAddTable, setShowAddTable] = useState(false);
@@ -219,7 +235,7 @@ const DiningModule: React.FC<DiningModuleProps> = ({ rooms, bookings, guests, se
     await db.menuItems.put(item);
     setMenu([...menu, item]);
     setShowAddItem(false);
-    setNewItem({ name: '', category: 'Main Course', subcategory: '', price: 0, dietaryType: 'VEG', isAvailable: true });
+    setNewItem({ name: '', category: 'Indian Main Course', subcategory: '', price: 0, dietaryType: 'VEG', isAvailable: true });
   };
 
   const deleteMenuItem = async (id: string) => {
